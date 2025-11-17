@@ -2,7 +2,7 @@
   "name": "azdopr",
   "displayName": "Azure DevOps PR Viewer",
   "description": "View all Pull Requests across your entire Azure DevOps organization in one place",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "publisher": "JohnCWaters",
   "engines": {
     "vscode": "^1.105.0"
@@ -10,64 +10,62 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onView:azureDevOpsPRs"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "azureDevOpsPRs.refresh",
         "title": "Refresh Pull Requests",
-        "category": "Azure DevOps PR",
+        "category": "Azure DevOps PR Viewer",
         "icon": "$(refresh)"
       },
       {
         "command": "azureDevOpsPRs.signIn",
-        "title": "Sign in to Azure DevOps",
-        "category": "Azure DevOps PR",
+        "title": "Sign in to Azure DevOps PR Viewer",
+        "category": "Azure DevOps PR Viewer",
         "icon": "$(sign-in)"
       },
       {
         "command": "azureDevOpsPRs.signOut",
-        "title": "Sign out from Azure DevOps",
-        "category": "Azure DevOps PR",
+        "title": "Sign out from Azure DevOps PR Viewer",
+        "category": "Azure DevOps PR Viewer",
         "icon": "$(sign-out)"
       },
       {
         "command": "azureDevOpsPRs.openPR",
         "title": "Open Pull Request in Browser",
-        "category": "Azure DevOps PR"
+        "category": "Azure DevOps PR Viewer"
       },
       {
         "command": "azureDevOpsPRs.viewPR",
         "title": "View Pull Request",
-        "category": "Azure DevOps PR"
+        "category": "Azure DevOps PR Viewer"
       },
       {
         "command": "azureDevOpsPRs.addLineComment",
         "title": "Add Comment to Line",
-        "category": "Azure DevOps PR",
+        "category": "Azure DevOps PR Viewer",
         "icon": "$(comment)"
       },
       {
         "command": "azureDevOpsPRs.addLineCommentFromCodeLens",
         "title": "Add Comment to Line (from CodeLens)",
-        "category": "Azure DevOps PR"
+        "category": "Azure DevOps PR Viewer"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "azure-devops-pr-explorer",
-          "title": "Azure DevOps PRs",
-          "icon": "resources/azure-devops-icon.svg"
+          "title": "Azure DevOps PR Viewer",
+          "icon": "resources/azdopr-icon.png"
         }
       ]
     },
     "views": {
       "azure-devops-pr-explorer": [
         {
+          "icon": "resources/azdopr-icon.png",
           "id": "azureDevOpsPRs",
           "name": "Pull Requests"
         }
@@ -93,7 +91,7 @@
     "viewsWelcome": [
       {
         "view": "azureDevOpsPRs",
-        "contents": "Welcome to Azure DevOps PR Viewer!\n\nTo get started, sign in to your Azure DevOps account.\n\n[Sign In to Azure DevOps](command:azureDevOpsPRs.signIn)\n\nOnce signed in, you'll see all pull requests from your organization.",
+        "contents": "Welcome to Azure DevOps PR Viewer!\n\nTo get started, sign in to your Azure DevOps account.\n\n[Sign In to Azure DevOps PR Viewer](command:azureDevOpsPRs.signIn)\n\nOnce signed in, you'll see all pull requests from your organization.",
         "when": "!azureDevOpsPRs:authenticated"
       }
     ],
@@ -151,6 +149,7 @@
   },
   "dependencies": {
     "@azure/msal-node": "^3.8.1",
-    "axios": "^1.13.2"
+    "axios": "^1.13.2",
+    "marked": "^17.0.0"
   }
 }

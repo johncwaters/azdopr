@@ -1,0 +1,38 @@
+import { defineConfig } from "vite";
+import { viteStaticCopy } from "vite-plugin-static-copy";
+
+export default defineConfig({
+  build: {
+    lib: {
+      entry: "./src/extension.ts",
+      formats: ["cjs"],
+      fileName: "extension",
+    },
+    rollupOptions: {
+      external: [
+        "vscode",
+        "axios",
+        "http",
+        "https",
+        "crypto",
+        "stream",
+        "util",
+        "buffer"
+      ],
+    },
+    sourcemap: true,
+    outDir: "out",
+    target: "node16",
+  },
+  plugins: [
+    viteStaticCopy({
+      targets: [
+        {
+          src: "resources/*",
+          dest: "resources"
+        }
+      ]
+    })
+  ],
+});
+
