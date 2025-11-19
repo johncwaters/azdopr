@@ -45,22 +45,13 @@ export class PRCommentController {
 
 		this.setupCommentingRangeProvider();
 
-		// Register command for accepting comment input (submit button)
 		this.disposables.push(
 			vscode.commands.registerCommand(
-				"azdo-pr-comments.acceptInput",
+				"azdo-pr-comments.createOrReplyComment",  // Rename for clarity
 				async (reply: vscode.CommentReply) => {
 					await this.handleCommentSubmit(reply);
 				},
 			),
-			vscode.window.onDidChangeActiveTextEditor((editor) => {
-				console.log(
-					`[PRCommentController] Active editor changed: ${editor ? editor.document.uri.toString() : "none"}`,
-				);
-				if (editor) {
-					this.loadCommentsForDocument(editor.document);
-				}
-			}),
 		);
 	}
 

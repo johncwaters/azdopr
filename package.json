@@ -44,15 +44,14 @@
         "category": "Azure DevOps PR Viewer"
       },
       {
-        "command": "azureDevOpsPRs.addLineComment",
-        "title": "Add Comment to Line",
+        "command": "azureDevOpsPRs.refreshComments",
+        "title": "Refresh Comments",
         "category": "Azure DevOps PR Viewer",
-        "icon": "$(comment)"
+        "icon": "$(refresh)"
       },
       {
-        "command": "azureDevOpsPRs.addLineCommentFromCodeLens",
-        "title": "Add Comment to Line (from CodeLens)",
-        "category": "Azure DevOps PR Viewer"
+        "command": "azdo-pr-comments.createOrReplyComment",
+        "title": "Add Comment"
       }
     ],
     "viewsContainers": {
@@ -82,13 +81,14 @@
         }
       ],
       "view/item/context": [],
-      "editor/context": [
+      "comments/commentThread/context": [
         {
-          "command": "azureDevOpsPRs.addLineComment",
-          "group": "azureDevOpsPR@1",
-          "when": "editorTextFocus"
+          "command": "azdo-pr-comments.createOrReplyComment",
+          "when": "commentController == azdo-pr-comments"
         }
-      ]
+      ],
+      "comments/comment/title": [],
+      "comments/comment/context": []
     },
     "viewsWelcome": [
       {
@@ -115,15 +115,10 @@
           "default": 500,
           "description": "Maximum number of PRs to fetch per project"
         },
-        "azureDevOpsPRViewer.enableInlineComments": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable inline comment CodeLens in PR diff views"
-        },
-        "azureDevOpsPRViewer.codeLensInterval": {
+        "azureDevOpsPRViewer.commentsAutoRefreshInterval": {
           "type": "number",
-          "default": 1,
-          "description": "Show 'Add Comment' CodeLens every N lines (1 = every line, 5 = every 5 lines, etc.)"
+          "default": 30,
+          "description": "Auto-refresh interval for comments in seconds (0 to disable)"
         }
       }
     }
