@@ -144,6 +144,18 @@ export class PullRequestViewerPanel {
 
 			webview.html = this._getLoadingHtml();
 
+			// Fetch full PR details to get complete description (list API truncates it)
+			const fullPRDetails = await this.azureDevOpsClient.getPullRequestDetails(
+				this.pullRequest.repository.project.id,
+				this.pullRequest.repository.id,
+				this.pullRequest.pullRequestId,
+			);
+
+			// Update the description with the full version
+			if (fullPRDetails.description) {
+				this.pullRequest.description = fullPRDetails.description;
+			}
+
 			// Fetch iterations
 			const iterations = await this.azureDevOpsClient.getPullRequestIterations(
 				this.pullRequest.repository.project.id,
@@ -716,29 +728,26 @@ export class PullRequestViewerPanel {
                 background-color: var(--vscode-editorWidget-background);
                 border-radius: 4px;
                 line-height: 1.6;
-                overflow-x: auto;
                 word-wrap: break-word;
+                overflow-wrap: break-word;
             }
-            .description h1, .description h2, .description h3, .description h4, .description h5, .description h6 {
-                margin-top: 15px;
-                margin-bottom: 10px;
+            .description p {
+                margin: 8px 0;
+            }
+            .description h1, .description h2, .description h3 {
+                margin-top: 16px;
+                margin-bottom: 8px;
                 font-weight: 600;
             }
             .description h1 { font-size: 20px; }
             .description h2 { font-size: 18px; }
             .description h3 { font-size: 16px; }
-            .description h4 { font-size: 14px; }
-            .description h5 { font-size: 13px; }
-            .description h6 { font-size: 12px; }
-            .description p {
-                margin: 10px 0;
-            }
             .description ul, .description ol {
-                margin: 10px 0;
+                margin: 8px 0;
                 padding-left: 25px;
             }
             .description li {
-                margin: 5px 0;
+                margin: 4px 0;
             }
             .description code {
                 background-color: var(--vscode-textCodeBlock-background);
@@ -752,7 +761,7 @@ export class PullRequestViewerPanel {
                 padding: 10px;
                 border-radius: 4px;
                 overflow-x: auto;
-                margin: 10px 0;
+                margin: 8px 0;
             }
             .description pre code {
                 background-color: transparent;
@@ -761,7 +770,7 @@ export class PullRequestViewerPanel {
             .description blockquote {
                 border-left: 3px solid var(--vscode-panel-border);
                 padding-left: 10px;
-                margin: 10px 0;
+                margin: 8px 0;
                 color: var(--vscode-descriptionForeground);
             }
             .description a {
@@ -770,25 +779,6 @@ export class PullRequestViewerPanel {
             }
             .description a:hover {
                 text-decoration: underline;
-            }
-            .description table {
-                border-collapse: collapse;
-                margin: 10px 0;
-                width: 100%;
-            }
-            .description th, .description td {
-                border: 1px solid var(--vscode-panel-border);
-                padding: 6px 10px;
-                text-align: left;
-            }
-            .description th {
-                background-color: var(--vscode-editor-background);
-                font-weight: 600;
-            }
-            .description hr {
-                border: none;
-                border-top: 1px solid var(--vscode-panel-border);
-                margin: 15px 0;
             }
             .file-list {
                 list-style: none;
@@ -1298,8 +1288,6 @@ export class PullRequestViewerPanel {
 	}
 
 	private _getDescriptionHtml(descriptionHtml: string): string {
-		// Use string concatenation instead of template literals to avoid
-		// issues with special characters in the description
 		return (
 			'<div class="reviewers-section">' +
 			'<h3 class="section-title" style="margin-bottom: 8px; font-size: 14px;">Description</h3>' +

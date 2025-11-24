@@ -6,8 +6,7 @@ import type {
 import type { AzureDevOpsAuthProvider } from "../auth/authProvider";
 
 export class PullRequestProvider
-	implements vscode.TreeDataProvider<PRTreeItem>
-{
+	implements vscode.TreeDataProvider<PRTreeItem> {
 	private readonly _onDidChangeTreeData: vscode.EventEmitter<
 		PRTreeItem | undefined | null | void
 	> = new vscode.EventEmitter<PRTreeItem | undefined | null | void>();
@@ -22,7 +21,7 @@ export class PullRequestProvider
 	constructor(
 		private readonly azureDevOpsClient: AzureDevOpsClient,
 		private readonly authProvider: AzureDevOpsAuthProvider,
-	) {}
+	) { }
 
 	initialize(): void {
 		this.hasInitialized = true;
@@ -86,10 +85,7 @@ export class PullRequestProvider
 					this.isRefreshing = true;
 
 					const result = this.getGroupedByProjectView();
-					console.log(
-						`Returning ${result.length} cached projects at root level`,
-						result.map((p) => p.label),
-					);
+
 					return result;
 				}
 
@@ -107,10 +103,7 @@ export class PullRequestProvider
 				}
 
 				const result = this.getGroupedByProjectView();
-				console.log(
-					`Returning ${result.length} projects at root level`,
-					result.map((p) => p.label),
-				);
+
 				return result;
 			} catch (error) {
 				const errorMessage =
