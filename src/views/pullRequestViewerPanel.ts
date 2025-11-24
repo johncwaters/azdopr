@@ -8,6 +8,7 @@ import {
 	PRContextManager,
 	type PRFileContext,
 } from "../services/prContextManager";
+import { PRCacheService, type PRIteration } from "../services/prCache";
 
 export class PullRequestViewerPanel {
 	private static _currentPanel: PullRequestViewerPanel | undefined;
@@ -66,6 +67,10 @@ export class PullRequestViewerPanel {
 						break;
 					case "submitReview":
 						await this._handleReviewSubmission(message.vote);
+						break;
+					case "refresh":
+						console.log("Refresh requested from webview");
+						await this.refreshWithFreshData();
 						break;
 					default:
 						console.log("Unknown command:", message.command);
@@ -130,6 +135,27 @@ export class PullRequestViewerPanel {
 		}
 	}
 
+	/**
+	 * Invalidate the cache for the current PR
+	 * This forces a fresh fetch on the next update
+	 */
+	public invalidateCache(): void {
+		const cache = PRCacheService.getInstance();
+		cache.invalidate(
+			this.pullRequest.repository.project.id,
+			this.pullRequest.repository.id,
+			this.pullRequest.pullRequestId,
+		);
+	}
+
+	/**
+	 * Refresh the PR view with fresh data from the API
+	 */
+	public async refreshWithFreshData(): Promise<void> {
+		this.invalidateCache();
+		await this._update();
+	}
+
 	private async _update() {
 		const webview = this._panel.webview;
 		this._panel.title = `PR #${this.pullRequest.pullRequestId}: ${this.pullRequest.title}`;
@@ -144,38 +170,70 @@ export class PullRequestViewerPanel {
 
 			webview.html = this._getLoadingHtml();
 
-			// Fetch full PR details to get complete description (list API truncates it)
-			const fullPRDetails = await this.azureDevOpsClient.getPullRequestDetails(
-				this.pullRequest.repository.project.id,
-				this.pullRequest.repository.id,
-				this.pullRequest.pullRequestId,
-			);
+			const projectId = this.pullRequest.repository.project.id;
+			const repositoryId = this.pullRequest.repository.id;
+			const pullRequestId = this.pullRequest.pullRequestId;
+
+			// Get cache service
+			const cache = PRCacheService.getInstance();
+
+			// Try to get cached data first
+			const cachedData = cache.get(projectId, repositoryId, pullRequestId);
+
+			let fullPRDetails: PullRequest;
+			let iterations: PRIteration[];
+			let fileChanges: PRFileChange[];
+			let cacheInfo: { isCached: boolean; ageInSeconds?: number };
+
+			if (cachedData) {
+				// Use cached data
+				console.log(`[PRViewerPanel] Using cached data for PR #${pullRequestId}`);
+				fullPRDetails = cachedData.fullDetails;
+				iterations = cachedData.iterations;
+				fileChanges = cachedData.fileChanges;
+				const ageMs = Date.now() - cachedData.timestamp;
+				cacheInfo = { isCached: true, ageInSeconds: Math.floor(ageMs / 1000) };
+			} else {
+				// Fetch fresh data from API
+				console.log(`[PRViewerPanel] Fetching fresh data for PR #${pullRequestId}`);
+
+				// Fetch full PR details to get complete description (list API truncates it)
+				fullPRDetails = await this.azureDevOpsClient.getPullRequestDetails(
+					projectId,
+					repositoryId,
+					pullRequestId,
+				);
+
+				// Fetch iterations
+				iterations = await this.azureDevOpsClient.getPullRequestIterations(
+					projectId,
+					repositoryId,
+					pullRequestId,
+				);
+
+				// Get file changes from the latest iteration
+				fileChanges = [];
+				if (iterations.length > 0) {
+					const latestIteration = iterations.at(-1);
+					if (latestIteration) {
+						fileChanges =
+							await this.azureDevOpsClient.getPullRequestIterationChanges(
+								projectId,
+								repositoryId,
+								pullRequestId,
+								latestIteration.id,
+							);
+					}
+				}
+
+				// Store in cache
+				cache.set(projectId, repositoryId, pullRequestId, fullPRDetails, iterations, fileChanges);
+				cacheInfo = { isCached: false };
+			}
 
 			// Update the description with the full version
 			if (fullPRDetails.description) {
 				this.pullRequest.description = fullPRDetails.description;
-			}
-
-			// Fetch iterations
-			const iterations = await this.azureDevOpsClient.getPullRequestIterations(
-				this.pullRequest.repository.project.id,
-				this.pullRequest.repository.id,
-				this.pullRequest.pullRequestId,
-			);
-
-			// Get file changes from the latest iteration
-			let fileChanges: PRFileChange[] = [];
-			if (iterations.length > 0) {
-				const latestIteration = iterations.at(-1);
-				if (latestIteration) {
-					fileChanges =
-						await this.azureDevOpsClient.getPullRequestIterationChanges(
-							this.pullRequest.repository.project.id,
-							this.pullRequest.repository.id,
-							this.pullRequest.pullRequestId,
-							latestIteration.id,
-						);
-				}
 			}
 
 			// Convert markdown description to HTML
@@ -184,7 +242,7 @@ export class PullRequestViewerPanel {
 				? await marked(this.pullRequest.description)
 				: "No description provided.";
 
-			webview.html = this._getHtmlForWebview(webview, fileChanges, descriptionHtml);
+			webview.html = this._getHtmlForWebview(webview, fileChanges, descriptionHtml, cacheInfo);
 		} catch (error) {
 			const friendlyMessage = this._getFriendlyErrorMessage(error);
 			console.error("Error loading pull request:", error);
@@ -260,6 +318,7 @@ export class PullRequestViewerPanel {
 		webview: vscode.Webview,
 		fileChanges: PRFileChange[],
 		descriptionHtml: string,
+		cacheInfo: { isCached: boolean; ageInSeconds?: number },
 	): string {
 		const pr = this.pullRequest;
 		const nonce = getNonce();
@@ -289,7 +348,7 @@ export class PullRequestViewerPanel {
 			"</head>",
 			"<body>",
 			"<div class=\"container\">",
-			this._getHeaderHtml(pr, sourceBranch, targetBranch, createdDate, createdTime),
+			this._getHeaderHtml(pr, sourceBranch, targetBranch, createdDate, createdTime, cacheInfo),
 			"<div class=\"review-section-wrapper\">",
 			this._getCombinedReviewsHtml(pr),
 			this._getDescriptionHtml(descriptionHtml),
@@ -351,6 +410,14 @@ export class PullRequestViewerPanel {
 			}
 
 			vscode.window.showInformationMessage(voteMessage);
+
+			// Invalidate cache for this PR since the review state has changed
+			const cache = PRCacheService.getInstance();
+			cache.invalidate(
+				this.pullRequest.repository.project.id,
+				this.pullRequest.repository.id,
+				this.pullRequest.pullRequestId,
+			);
 
 			// Refresh the panel to show updated reviewer status
 			await this._update();
@@ -584,7 +651,12 @@ export class PullRequestViewerPanel {
                 margin: 0;
                 flex: 1;
             }
-            .open-browser-btn {
+            .header-buttons {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .open-browser-btn, .refresh-btn {
                 display: flex;
                 align-items: center;
                 gap: 6px;
@@ -598,12 +670,16 @@ export class PullRequestViewerPanel {
                 white-space: nowrap;
                 transition: all 0.2s;
             }
-            .open-browser-btn:hover {
+            .open-browser-btn:hover, .refresh-btn:hover {
                 background-color: var(--vscode-list-hoverBackground);
                 border-color: var(--vscode-textLink-foreground);
             }
-            .open-browser-btn:active {
+            .open-browser-btn:active, .refresh-btn:active {
                 background-color: var(--vscode-list-activeSelectionBackground);
+            }
+            .refresh-btn .btn-icon {
+                font-size: 14px;
+                line-height: 1;
             }
             .pr-meta {
                 color: var(--vscode-descriptionForeground);
@@ -1029,6 +1105,7 @@ export class PullRequestViewerPanel {
 		targetBranch: string,
 		createdDate: string,
 		createdTime: string,
+		cacheInfo: { isCached: boolean; ageInSeconds?: number },
 	): string {
 		const statusClass = pr.isDraft ? "status-draft" : "status-active";
 		const statusText = pr.isDraft ? "Draft" : pr.status;
@@ -1039,6 +1116,20 @@ export class PullRequestViewerPanel {
 			.get<string>("organization", "");
 		const prUrl = `https://dev.azure.com/${org}/${pr.repository?.project?.name || "unknown"}/_git/${pr.repository?.name || "unknown"}/pullrequest/${pr.pullRequestId}`;
 
+		// Build refresh button tooltip with cache status
+		let refreshTooltip = "Refresh PR data";
+		if (cacheInfo.isCached && cacheInfo.ageInSeconds !== undefined) {
+			const minutes = Math.floor(cacheInfo.ageInSeconds / 60);
+			const seconds = cacheInfo.ageInSeconds % 60;
+			if (minutes > 0) {
+				refreshTooltip = `Cached ${minutes}m ${seconds}s ago - Click to refresh`;
+			} else {
+				refreshTooltip = `Cached ${seconds}s ago - Click to refresh`;
+			}
+		} else if (!cacheInfo.isCached) {
+			refreshTooltip = "Fresh data loaded - Click to refresh";
+		}
+
 		return `
         <div class="header">
             <div class="header-top">
@@ -1046,9 +1137,15 @@ export class PullRequestViewerPanel {
                     ${this._escapeHtml(pr.title || "Untitled PR")}
                     <span class="status-badge ${statusClass}">${statusText}</span>
                 </h1>
-                <button class="open-browser-btn" data-url="${this._escapeHtml(prUrl)}" title="Open PR in Azure DevOps">
-                    Open in Browser
-                </button>
+                <div class="header-buttons">
+                    <button class="refresh-btn" title="${this._escapeHtml(refreshTooltip)}">
+                        <span class="btn-icon">↻</span>
+                        Refresh
+                    </button>
+                    <button class="open-browser-btn" data-url="${this._escapeHtml(prUrl)}" title="Open PR in Azure DevOps">
+                        Open in Browser
+                    </button>
+                </div>
             </div>
             <div class="pr-meta">
                 #${pr.pullRequestId} opened on ${createdDate} at ${createdTime} by ${this._escapeHtml(pr.createdBy?.displayName || "Unknown")}
@@ -1415,6 +1512,21 @@ export class PullRequestViewerPanel {
                             console.log('Review submission message posted successfully');
                         } catch (error) {
                             console.error('Error posting review message:', error);
+                        }
+                    }
+
+                    // Handle refresh button clicks
+                    const refreshBtn = target.closest('.refresh-btn');
+                    if (refreshBtn) {
+                        console.log('Refresh button clicked');
+
+                        try {
+                            vscode.postMessage({
+                                command: 'refresh'
+                            });
+                            console.log('Refresh message posted successfully');
+                        } catch (error) {
+                            console.error('Error posting refresh message:', error);
                         }
                     }
                 });

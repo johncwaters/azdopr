@@ -11,6 +11,7 @@ View all Pull Requests across your Azure DevOps organization in VS Code.
 - View and diff PR files without local checkout
 - Add inline comments directly to PR diffs using VS Code's native commenting API
 - Auto-refresh with intelligent caching for improved performance
+- Short-term cache for PR details (5-minute TTL) to optimize repeated views
 - Manual refresh options
 
 ## Quick Start
@@ -59,6 +60,12 @@ Click any PR to view details. Right-click to open in browser.
 3. Click the comment icon and enter your comment
 
 Comments are displayed inline using VS Code's native commenting system, showing existing PR comments and allowing you to add new ones directly to Azure DevOps.
+
+### Refresh PR Data
+
+Click the "Refresh" button in the PR header to force a fresh data fetch from Azure DevOps. The button's tooltip shows cache status:
+- "Cached X seconds/minutes ago" - Data is from cache
+- "Fresh data loaded" - Data was just fetched from API
 
 ### Troubleshooting
 
