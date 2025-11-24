@@ -38,84 +38,7 @@ export class PullRequestProvider
 
 	async getChildren(element?: PRTreeItem): Promise<PRTreeItem[]> {
 		if (!element) {
-			// Don't show anything until we've initialized (prevents flash of sign-in during load)
-			if (!this.hasInitialized) {
-				return [];
-			}
-
-			// Check authentication
-			const isAuthenticated = await this.authProvider.isAuthenticated();
-
-			if (!isAuthenticated) {
-				// Show sign-in button
-				const signInItem = new PRTreeItem(
-					"Sign in to Azure DevOps PR Viewer",
-					"",
-					vscode.TreeItemCollapsibleState.None,
-				);
-				signInItem.command = {
-					command: "azureDevOpsPRs.signIn",
-					title: "Sign In",
-					arguments: [],
-				};
-				signInItem.iconPath = new vscode.ThemeIcon(
-					"sign-in",
-					new vscode.ThemeColor("charts.blue"),
-				);
-				signInItem.contextValue = "signin";
-				signInItem.tooltip = new vscode.MarkdownString(
-					"**Sign in to Azure DevOps PR Viewer**\n\nClick to authenticate with your Microsoft account and view pull requests across your organization.",
-				);
-				return [signInItem];
-			}
-
-			// Root level - fetch and display PRs
-			try {
-				// Show cached PRs immediately if available
-				if (this.pullRequests.length > 0 && !this.isRefreshing) {
-					// Refresh in background
-					this.fetchPullRequests()
-						.then(() => {
-							this.isRefreshing = false;
-							this.refresh();
-						})
-						.catch(() => {
-							this.isRefreshing = false;
-						});
-					this.isRefreshing = true;
-
-					const result = this.getGroupedByProjectView();
-
-					return result;
-				}
-
-				// First load - wait for data
-				await this.fetchPullRequests();
-
-				if (this.pullRequests.length === 0) {
-					return [
-						new PRTreeItem(
-							"No pull requests found",
-							"",
-							vscode.TreeItemCollapsibleState.None,
-						),
-					];
-				}
-
-				const result = this.getGroupedByProjectView();
-
-				return result;
-			} catch (error) {
-				const errorMessage =
-					error instanceof Error ? error.message : "Unknown error";
-				return [
-					new PRTreeItem(
-						`Error: ${errorMessage}`,
-						"",
-						vscode.TreeItemCollapsibleState.None,
-					),
-				];
-			}
+			return this.getRootChildren();
 		}
 
 		if (element.contextValue === "project") {
@@ -129,6 +52,92 @@ export class PullRequestProvider
 		}
 
 		return [];
+	}
+
+	private async getRootChildren(): Promise<PRTreeItem[]> {
+		// Don't show anything until we've initialized (prevents flash of sign-in during load)
+		if (!this.hasInitialized) {
+			return [];
+		}
+
+		// Check authentication
+		const isAuthenticated = await this.authProvider.isAuthenticated();
+		if (!isAuthenticated) {
+			return this.createSignInItem();
+		}
+
+		// Root level - fetch and display PRs
+		return this.fetchAndDisplayPullRequests();
+	}
+
+	private createSignInItem(): PRTreeItem[] {
+		const signInItem = new PRTreeItem(
+			"Sign in to Azure DevOps PR Viewer",
+			"",
+			vscode.TreeItemCollapsibleState.None,
+		);
+		signInItem.command = {
+			command: "azureDevOpsPRs.signIn",
+			title: "Sign In",
+			arguments: [],
+		};
+		signInItem.iconPath = new vscode.ThemeIcon(
+			"sign-in",
+			new vscode.ThemeColor("charts.blue"),
+		);
+		signInItem.contextValue = "signin";
+		signInItem.tooltip = new vscode.MarkdownString(
+			"**Sign in to Azure DevOps PR Viewer**\n\nClick to authenticate with your Microsoft account and view pull requests across your organization.",
+		);
+		return [signInItem];
+	}
+
+	private async fetchAndDisplayPullRequests(): Promise<PRTreeItem[]> {
+		try {
+			// Show cached PRs immediately if available
+			const hasCachedData = this.pullRequests.length > 0 && !this.isRefreshing;
+			if (hasCachedData) {
+				this.refreshInBackground();
+				return this.getGroupedByProjectView();
+			}
+
+			// First load - wait for data
+			await this.fetchPullRequests();
+
+			if (this.pullRequests.length === 0) {
+				return [
+					new PRTreeItem(
+						"No pull requests found",
+						"",
+						vscode.TreeItemCollapsibleState.None,
+					),
+				];
+			}
+
+			return this.getGroupedByProjectView();
+		} catch (error) {
+			const errorMessage =
+				error instanceof Error ? error.message : "Unknown error";
+			return [
+				new PRTreeItem(
+					`Error: ${errorMessage}`,
+					"",
+					vscode.TreeItemCollapsibleState.None,
+				),
+			];
+		}
+	}
+
+	private refreshInBackground(): void {
+		this.fetchPullRequests()
+			.then(() => {
+				this.isRefreshing = false;
+				this.refresh();
+			})
+			.catch(() => {
+				this.isRefreshing = false;
+			});
+		this.isRefreshing = true;
 	}
 
 	private async fetchPullRequests(): Promise<void> {
