@@ -14,8 +14,36 @@ interface CommentThreadMetadata {
 }
 
 /**
- * Controller for displaying and managing PR comments inline in diff views
- * Uses VS Code's native Comment API to show existing comments and allow adding new ones
+ * ============================================================================
+ * PRCommentController - CRITICAL COMPONENT FOR INLINE COMMENT DISPLAY
+ * ============================================================================
+ *
+ * This controller is responsible for displaying Azure DevOps PR comments
+ * inline in file diff views. It uses VS Code's native Comment API to:
+ *
+ * 1. Fetch PR thread comments from Azure DevOps API
+ * 2. Filter comments relevant to the current file
+ * 3. Display comments at the correct line numbers in diff views
+ * 4. Allow users to add new comments and reply to existing threads
+ *
+ * HOW IT WORKS:
+ * - When a PR diff document (scheme: "azdo-pr") is opened/activated
+ * - Event listeners in extension.ts call loadCommentsForDocument()
+ * - This fetches all PR threads and filters by file path
+ * - Comments are displayed using VS Code's Comment API
+ * - Comments appear as decorations in the editor gutter
+ *
+ * DEPENDENCIES:
+ * - Requires PRContextManager to associate files with PR data
+ * - Requires event listeners in extension.ts (onDidOpenTextDocument, onDidChangeActiveTextEditor)
+ * - Virtual documents created by PullRequestViewerPanel with "azdo-pr" scheme
+ *
+ * DO NOT MODIFY WITHOUT TESTING:
+ * - Changes can break inline comment display in diff views
+ * - Test by: opening a PR, clicking a file with comments, verify comments appear
+ *
+ * @see extension.ts for event listener setup
+ * @see PullRequestViewerPanel._openFileDiff for virtual document creation
  */
 export class PRCommentController {
 	private readonly commentController: vscode.CommentController;
@@ -93,6 +121,13 @@ export class PRCommentController {
 
 	/**
 	 * Load and display comments for a document
+	 *
+	 * CRITICAL METHOD - Called by event listeners in extension.ts
+	 * This is the main entry point for loading comments when:
+	 * - A PR diff document is first opened
+	 * - User switches to a PR diff tab
+	 *
+	 * @param document The text document to load comments for (must have scheme "azdo-pr")
 	 */
 	public async loadCommentsForDocument(
 		document: vscode.TextDocument,
@@ -217,23 +252,51 @@ export class PRCommentController {
 		side: "base" | "modified",
 	): void {
 		// Determine which line to show the comment on based on the side
+		// Try the primary side first, then fall back to the other side
+		// This handles cases where comments are on deleted/added lines
 		let lineNumber: number | undefined;
+		let usedSide: string;
 
 		if (side === "modified") {
-			// For the modified side, use the right file position
+			// For the modified side, prefer the right file position
 			lineNumber = thread.threadContext?.rightFileStart?.line;
+			usedSide = "right";
+
+			// Fall back to left side if right side not available
+			// This happens when comment is on a deleted line in base
+			if (!lineNumber || lineNumber < 1) {
+				lineNumber = thread.threadContext?.leftFileStart?.line;
+				usedSide = "left (fallback)";
+			}
 		} else {
-			// For the base side, use the left file position
+			// For the base side, prefer the left file position
 			lineNumber = thread.threadContext?.leftFileStart?.line;
+			usedSide = "left";
+
+			// Fall back to right side if left side not available
+			// This happens when comment is on an added line in modified
+			if (!lineNumber || lineNumber < 1) {
+				lineNumber = thread.threadContext?.rightFileStart?.line;
+				usedSide = "right (fallback)";
+			}
 		}
 
-		// If no line number is available, skip this thread
+		// If no line number is available on either side, this is a file-level comment
+		// File-level comments should appear in the Conversation tab, not inline in the diff
 		if (!lineNumber || lineNumber < 1) {
 			console.log(
-				`Skipping thread ${thread.id}: No valid line number for ${side} side (lineNumber=${lineNumber})`,
+				`Skipping thread ${thread.id}: File-level comment (no specific line). This should appear in Conversation tab.`,
+			);
+			console.log(
+				`Thread ${thread.id} threadContext:`,
+				JSON.stringify(thread.threadContext, null, 2)
 			);
 			return;
 		}
+
+		console.log(
+			`Thread ${thread.id}: Using ${usedSide} line number ${lineNumber} for ${side} document`,
+		);
 
 		// Convert to 0-based line number
 		const zeroBasedLine = lineNumber - 1;

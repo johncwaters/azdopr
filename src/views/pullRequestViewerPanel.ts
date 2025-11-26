@@ -3,6 +3,7 @@ import type {
     AzureDevOpsClient,
     PullRequest,
     PRFileChange,
+    PRThread,
 } from "../services/azureDevOpsClient";
 import {
     PRContextManager,
@@ -181,13 +182,16 @@ export class PullRequestViewerPanel {
             let fullPRDetails: PullRequest;
             let iterations: PRIteration[];
             let fileChanges: PRFileChange[];
+            let threads: PRThread[];
             let cacheInfo: { isCached: boolean; ageInSeconds?: number };
 
             if (cachedData) {
                 // Use cached data
                 console.log(`[PRViewerPanel] Using cached data for PR #${pullRequestId}`);
                 fullPRDetails = cachedData.fullDetails;
+                // iterations not needed here - only used when fetching fresh file changes
                 fileChanges = cachedData.fileChanges;
+                threads = cachedData.threads;
                 const ageMs = Date.now() - cachedData.timestamp;
                 cacheInfo = { isCached: true, ageInSeconds: Math.floor(ageMs / 1000) };
             } else {
@@ -223,15 +227,21 @@ export class PullRequestViewerPanel {
                     }
                 }
 
+                // Fetch PR threads (comments)
+                threads = await this.azureDevOpsClient.getPullRequestThreads(
+                    projectId,
+                    repositoryId,
+                    pullRequestId,
+                );
+
                 // Store in cache
-                cache.set(projectId, repositoryId, pullRequestId, fullPRDetails, iterations, fileChanges);
+                cache.set(projectId, repositoryId, pullRequestId, fullPRDetails, iterations, fileChanges, threads);
                 cacheInfo = { isCached: false };
             }
 
-            // Update the description with the full version
-            if (fullPRDetails.description) {
-                this.pullRequest.description = fullPRDetails.description;
-            }
+            // Update the entire PR object with fresh/cached details to ensure all fields are current
+            // This includes title, description, status, isDraft, reviewers, and all other fields
+            this.pullRequest = fullPRDetails;
 
             // Convert markdown description to HTML
             const { marked } = await PullRequestViewerPanel.getMarked();
@@ -239,7 +249,7 @@ export class PullRequestViewerPanel {
                 ? await marked(this.pullRequest.description)
                 : "No description provided.";
 
-            webview.html = this._getHtmlForWebview(webview, fileChanges, descriptionHtml, cacheInfo);
+            webview.html = this._getHtmlForWebview(webview, fileChanges, threads, descriptionHtml, cacheInfo);
         } catch (error) {
             const friendlyMessage = this._getFriendlyErrorMessage(error);
             console.error("Error loading pull request:", error);
@@ -314,6 +324,7 @@ export class PullRequestViewerPanel {
     private _getHtmlForWebview(
         webview: vscode.Webview,
         fileChanges: PRFileChange[],
+        threads: PRThread[],
         descriptionHtml: string,
         cacheInfo: { isCached: boolean; ageInSeconds?: number },
     ): string {
@@ -346,11 +357,11 @@ export class PullRequestViewerPanel {
             "<body>",
             "<div class=\"container\">",
             this._getHeaderHtml(pr, sourceBranch, targetBranch, createdDate, createdTime, cacheInfo),
-            "<div class=\"review-section-wrapper\">",
-            this._getCombinedReviewsHtml(pr),
-            this._getDescriptionHtml(descriptionHtml),
+            this._getTabNavigationHtml(fileChanges, threads),
+            "<div class=\"tab-content\">",
+            this._getConversationTabHtml(pr, descriptionHtml, threads),
+            this._getFilesTabHtml(fileChanges, threads),
             "</div>",
-            this._getFileChangesHtml(fileChanges),
             "</div>",
             this._getScripts(nonce),
             "</body>",
@@ -429,6 +440,26 @@ export class PullRequestViewerPanel {
 
     /**
      * Open a file in diff view showing changes between base and modified versions
+     *
+     * CRITICAL METHOD - This creates virtual documents with the "azdo-pr" scheme
+     * which is essential for inline comment display to work correctly.
+     *
+     * The "azdo-pr" URI scheme is used to:
+     * 1. Identify PR diff documents vs regular files
+     * 2. Trigger comment loading via event listeners in extension.ts
+     * 3. Associate documents with PR context for commenting
+     *
+     * Flow for inline comments:
+     * 1. This method creates URIs with scheme "azdo-pr" (lines 510-515)
+     * 2. VS Code opens the diff view with these virtual documents
+     * 3. Event listeners in extension.ts detect the "azdo-pr" scheme
+     * 4. PRCommentController.loadCommentsForDocument() is called
+     * 5. Comments appear inline in the diff view
+     *
+     * DO NOT CHANGE the URI scheme without updating:
+     * - extension.ts event listeners (onDidOpenTextDocument, onDidChangeActiveTextEditor)
+     * - PRCommentController.loadCommentsForDocument() scheme check
+     * - PRCommentController.commentingRangeProvider scheme check
      */
     private async _openFileDiff(path: string, changeType: string, originalPath?: string) {
         try {
@@ -493,7 +524,13 @@ export class PullRequestViewerPanel {
 
                         progress.report({ increment: 75, message: "Opening diff view..." });
 
-                        // Create virtual document URIs for both versions
+                        // ================================================================
+                        // CRITICAL: Create virtual document URIs with "azdo-pr" scheme
+                        // This specific scheme is REQUIRED for inline comments to work!
+                        // Event listeners in extension.ts watch for this scheme to trigger
+                        // comment loading. DO NOT CHANGE "azdo-pr" without updating all
+                        // related event listeners and comment controller code.
+                        // ================================================================
                         const prId = this.pullRequest.pullRequestId;
                         const repoName = this.pullRequest.repository?.name || "unknown";
                         const baseUri = vscode.Uri.parse(
@@ -631,9 +668,8 @@ export class PullRequestViewerPanel {
                 overflow-x: hidden;
             }
             .header {
-                border-bottom: 1px solid var(--vscode-panel-border);
-                padding-bottom: 20px;
-                margin-bottom: 20px;
+                padding-bottom: 10px;
+                margin-bottom: 10px;
             }
             .header-top {
                 display: flex;
@@ -869,6 +905,42 @@ export class PullRequestViewerPanel {
             .file-item:hover {
                 background-color: var(--vscode-list-hoverBackground);
             }
+            .file-info {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+            }
+            .file-name {
+                font-weight: 500;
+                font-size: 13px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .file-dir-path {
+                font-size: 11px;
+                color: var(--vscode-descriptionForeground);
+                opacity: 0.8;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .comment-count-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 3px 8px;
+                background-color: var(--vscode-badge-background);
+                color: var(--vscode-badge-foreground);
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 500;
+                white-space: nowrap;
+                margin-left: auto;
+                flex-shrink: 0;
+            }
             .file-change-type {
                 font-size: 11px;
                 padding: 2px 6px;
@@ -1001,7 +1073,6 @@ export class PullRequestViewerPanel {
                 align-items: center;
                 margin-bottom: 12px;
                 padding-bottom: 10px;
-                border-bottom: 1px solid var(--vscode-panel-border);
                 gap: 10px;
             }
             .review-subsection {
@@ -1093,7 +1164,308 @@ export class PullRequestViewerPanel {
             .vote-waiting-author {
                 color: #ffa500;
             }
+            .tab-navigation {
+                display: flex;
+                border-bottom: 1px solid var(--vscode-panel-border);
+                margin: 20px 0 0 0;
+                gap: 4px;
+            }
+            .tab-button {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 10px 16px;
+                background: transparent;
+                border: none;
+                border-bottom: 2px solid transparent;
+                color: var(--vscode-descriptionForeground);
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 500;
+                transition: all 0.2s;
+                position: relative;
+            }
+            .tab-button:hover {
+                color: var(--vscode-foreground);
+                background-color: var(--vscode-list-hoverBackground);
+            }
+            .tab-button.active {
+                color: var(--vscode-foreground);
+                border-bottom-color: var(--vscode-textLink-foreground);
+            }
+            .tab-icon {
+                font-size: 16px;
+                line-height: 1;
+            }
+            .tab-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 20px;
+                height: 20px;
+                padding: 0 6px;
+                background-color: var(--vscode-badge-background);
+                color: var(--vscode-badge-foreground);
+                border-radius: 10px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            .tab-content {
+                margin-top: 0;
+            }
+            .tab-panel {
+                display: none;
+                animation: fadeIn 0.2s ease-in;
+            }
+            .tab-panel.active {
+                display: block;
+            }
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-4px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .conversation-layout {
+                display: grid;
+                grid-template-columns: minmax(250px, 320px) 1fr;
+                gap: 20px;
+                margin: 20px 0;
+                align-items: start;
+            }
+            @media (max-width: 900px) {
+                .conversation-layout {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .conversation-sidebar {
+                position: sticky;
+                top: 20px;
+            }
+            .conversation-main {
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .content-grid {
+                display: grid;
+                grid-template-columns: minmax(400px, 1fr) minmax(300px, 450px);
+                gap: 20px;
+                margin: 20px 0;
+                align-items: start;
+            }
+            @media (max-width: 1000px) {
+                .content-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+            .file-changes-section {
+                min-width: 0;
+                padding: 20px 0;
+            }
+            .file-changes-section .file-list {
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+            .file-changes-section .file-item {
+                border-bottom: 1px solid var(--vscode-panel-border);
+            }
+            .file-changes-section .file-item:last-child {
+                border-bottom: none;
+            }
+            .description-section {
+                background-color: var(--vscode-editorWidget-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 6px;
+                padding: 16px;
+            }
+            .general-comments-section {
+                min-width: 0;
+            }
+            .general-comments-section .section-title {
+                margin-bottom: 12px;
+                font-size: 16px;
+            }
+            .general-comments-list {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            .general-comment-thread {
+                background-color: var(--vscode-editorWidget-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                padding: 12px;
+            }
+            .comment-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+                padding-bottom: 8px;
+  
+            }
+            .comment-header-left {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex: 1;
+                min-width: 0;
+            }
+            .comment-header-right {
+                flex-shrink: 0;
+            }
+            .comment-author {
+                font-weight: 600;
+                font-size: 13px;
+                color: var(--vscode-foreground);
+                flex-shrink: 0;
+            }
+            .comment-meta {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+            .comment-time {
+                font-size: 11px;
+                color: var(--vscode-descriptionForeground);
+                white-space: nowrap;
+            }
+            .comment-time::before {
+                content: "•";
+                margin-right: 8px;
+                color: var(--vscode-descriptionForeground);
+                opacity: 0.5;
+            }
+            .comment-status-badge {
+                display: inline-block;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 500;
+                text-transform: uppercase;
+                white-space: nowrap;
+            }
+            .status-badge-resolved {
+                background-color: var(--vscode-testing-iconPassed);
+                color: white;
+            }
+            .status-badge-wontfix {
+                background-color: var(--vscode-descriptionForeground);
+                color: white;
+            }
+            .status-badge-pending {
+                background-color: #ffa500;
+                color: white;
+            }
+            .status-badge-unknown {
+                background-color: var(--vscode-badge-background);
+                color: var(--vscode-badge-foreground);
+            }
+            .comment-body {
+                font-size: 13px;
+                line-height: 1.5;
+                color: var(--vscode-foreground);
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+            .comment-reply-count {
+                font-size: 11px;
+                color: var(--vscode-descriptionForeground);
+                margin-top: 8px;
+                padding-top: 8px;
+                border-top: 1px solid var(--vscode-panel-border);
+                font-weight: 500;
+            }
+            .comment-replies {
+                margin-top: 8px;
+                padding-top: 8px;
+                border-top: 1px solid var(--vscode-panel-border);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .comment-reply {
+                padding: 8px;
+                background-color: var(--vscode-editor-background);
+                border-radius: 3px;
+                border-left: 2px solid var(--vscode-panel-border);
+            }
+            .comment-reply-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 4px;
+                gap: 8px;
+            }
+            .comment-reply .comment-author {
+                font-size: 12px;
+                font-weight: 500;
+            }
+            .comment-reply .comment-body {
+                font-size: 12px;
+            }
         </style>`;
+    }
+
+    /**
+     * Get the tab navigation HTML
+     */
+    private _getTabNavigationHtml(fileChanges: PRFileChange[], threads: PRThread[]): string {
+        const fileCount = fileChanges.filter((c) => !c.item.isFolder).length;
+        const generalCommentCount = threads.filter((thread) =>
+            !thread.threadContext?.filePath && !this._isVoteNotification(thread)
+        ).length;
+
+        return `
+        <div class="tab-navigation">
+            <button class="tab-button active" data-tab="conversation">
+                <span class="tab-icon">💬</span>
+                Conversation
+                ${generalCommentCount > 0 ? `<span class="tab-badge">${generalCommentCount}</span>` : ''}
+            </button>
+            <button class="tab-button" data-tab="files">
+                <span class="tab-icon">📄</span>
+                Files Changed
+                <span class="tab-badge">${fileCount}</span>
+            </button>
+        </div>`;
+    }
+
+    /**
+     * Get the conversation tab content
+     */
+    private _getConversationTabHtml(pr: PullRequest, descriptionHtml: string, threads: PRThread[]): string {
+        return `
+        <div class="tab-panel active" data-panel="conversation">
+            <div class="conversation-layout">
+                <div class="conversation-sidebar">
+                    ${this._getCombinedReviewsHtml(pr)}
+                </div>
+                <div class="conversation-main">
+                    ${this._getDescriptionHtml(descriptionHtml)}
+                    ${this._getGeneralCommentsHtml(threads)}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    /**
+     * Get the files tab content
+     */
+    private _getFilesTabHtml(fileChanges: PRFileChange[], threads: PRThread[]): string {
+        return `
+        <div class="tab-panel" data-panel="files">
+            ${this._getFileChangesHtml(fileChanges, threads)}
+        </div>`;
     }
 
     private _getHeaderHtml(
@@ -1383,8 +1755,8 @@ export class PullRequestViewerPanel {
 
     private _getDescriptionHtml(descriptionHtml: string): string {
         return (
-            '<div class="reviewers-section">' +
-            '<h3 class="section-title" style="margin-bottom: 8px; font-size: 14px;">Description</h3>' +
+            '<div class="description-section">' +
+            '<h3 class="section-title" style="margin-bottom: 12px; font-size: 16px;">Description</h3>' +
             '<div class="description">' +
             descriptionHtml +
             "</div>" +
@@ -1392,14 +1764,243 @@ export class PullRequestViewerPanel {
         );
     }
 
-    private _getFileChangesHtml(fileChanges: PRFileChange[]): string {
-        if (fileChanges.length === 0) {
+    /**
+     * Count the number of comments per file from PR threads
+     * Only counts inline comments (those with specific line numbers)
+     * File-level comments (without line numbers) are excluded and shown in Conversation tab
+     * @param threads Array of PR threads
+     * @returns Map of file path to comment count
+     */
+    private _countCommentsPerFile(threads: PRThread[]): Map<string, number> {
+        const commentCounts = new Map<string, number>();
+
+        for (const thread of threads) {
+            // Only count threads that have a file context and at least one comment
+            if (thread.threadContext?.filePath && thread.comments && thread.comments.length > 0) {
+                // Skip file-level comments (those without specific line positions)
+                // These should only appear in the Conversation tab
+                const hasLinePosition = thread.threadContext.leftFileStart?.line || thread.threadContext.rightFileStart?.line;
+                if (!hasLinePosition) {
+                    console.log(`[PRViewerPanel] Excluding file-level comment (thread ${thread.id}) from file badge count`);
+                    continue;
+                }
+
+                let filePath = thread.threadContext.filePath;
+
+                // Normalize path - ensure it starts with /
+                if (!filePath.startsWith('/')) {
+                    filePath = '/' + filePath;
+                }
+
+                const currentCount = commentCounts.get(filePath) || 0;
+                // Count all comments in the thread
+                commentCounts.set(filePath, currentCount + thread.comments.length);
+            }
+        }
+
+        console.log('[PRViewerPanel] Comment counts per file:', Object.fromEntries(commentCounts));
+        return commentCounts;
+    }
+
+    /**
+     * Check if a thread is a vote notification (system-generated vote comment)
+     */
+    private _isVoteNotification(thread: PRThread): boolean {
+        if (!thread.comments || thread.comments.length === 0) {
+            return false;
+        }
+
+        const firstComment = thread.comments[0];
+        const content = firstComment.content || "";
+
+        // Check for common vote notification patterns
+        const votePatterns = [
+            /voted\s+(-?\d+)/i,           // "voted -5", "voted 10"
+            /changed\s+their\s+vote/i,    // "changed their vote"
+            /reset\s+their\s+vote/i,      // "reset their vote"
+        ];
+
+        return votePatterns.some(pattern => pattern.test(content));
+    }
+
+    /**
+     * Get HTML for general PR comments and file-level comments
+     * Includes:
+     * 1. Threads without a file path (general PR comments)
+     * 2. Threads with a file path but no line numbers (file-level comments)
+     */
+    private _getGeneralCommentsHtml(threads: PRThread[]): string {
+        // Filter for general comments (no file path) and file-level comments (has file path but no line number)
+        const generalThreads = threads.filter((thread) => {
+            // Exclude vote notifications
+            if (this._isVoteNotification(thread)) {
+                return false;
+            }
+
+            // Include if no file path (general PR comment)
+            if (!thread.threadContext?.filePath) {
+                return true;
+            }
+
+            // Include if has file path but no line number (file-level comment)
+            const hasLinePosition = thread.threadContext.leftFileStart?.line || thread.threadContext.rightFileStart?.line;
+            return !hasLinePosition;
+        });
+
+        if (generalThreads.length === 0) {
             return `
-            <div class="section">
-                <h2 class="section-title" style="margin-bottom: 15px; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border);">File Changes</h2>
-                <div class="empty-state">No file changes available</div>
+            <div class="general-comments-section">
+                <h3 class="section-title">General Comments</h3>
+                <div class="empty-state" style="padding: 30px 20px; text-align: center; background-color: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px;">
+                    No general comments on this PR
+                </div>
             </div>`;
         }
+
+        // Sort threads by last updated date (newest first)
+        const sortedThreads = [...generalThreads].sort((a, b) =>
+            b.lastUpdatedDate.getTime() - a.lastUpdatedDate.getTime()
+        );
+
+        const threadItems = sortedThreads
+            .map((thread) => {
+                if (!thread.comments || thread.comments.length === 0) {
+                    return '';
+                }
+
+                const firstComment = thread.comments[0];
+                const authorName = firstComment.author?.displayName || "Unknown";
+                const rawContent = firstComment.content || "[No content]";
+                const content = this._cleanCommentContent(rawContent);
+                const replyCount = thread.comments.length - 1;
+
+                // Get status info - only show badge for meaningful statuses
+                const statusNum = typeof thread.status === 'string' ? parseInt(thread.status, 10) : thread.status;
+                let statusBadge = '';
+
+                // Only show status badges for specific non-active states
+                if (statusNum === 2 || statusNum === 4) {
+                    // Resolved or Closed
+                    statusBadge = `<span class="comment-status-badge status-badge-resolved">${this._escapeHtml('Resolved')}</span>`;
+                } else if (statusNum === 3 || statusNum === 5) {
+                    // Won't Fix or By Design
+                    const label = statusNum === 3 ? "Won't Fix" : 'By Design';
+                    statusBadge = `<span class="comment-status-badge status-badge-wontfix">${this._escapeHtml(label)}</span>`;
+                } else if (statusNum === 6) {
+                    // Pending
+                    statusBadge = `<span class="comment-status-badge status-badge-pending">Pending</span>`;
+                }
+                // Don't show badges for Active (1), Unknown (0), or other statuses
+
+                const timeAgo = this._formatTimeAgo(thread.lastUpdatedDate);
+
+                // Build replies HTML
+                let repliesHtml = '';
+                if (replyCount > 0) {
+                    const replies = thread.comments.slice(1).map(comment => {
+                        const replyAuthor = comment.author?.displayName || "Unknown";
+                        const rawReplyContent = comment.content || "[No content]";
+                        const replyContent = this._cleanCommentContent(rawReplyContent);
+                        const replyTime = this._formatTimeAgo(comment.publishedDate);
+
+                        return `
+                        <div class="comment-reply">
+                            <div class="comment-reply-header">
+                                <span class="comment-author">${this._escapeHtml(replyAuthor)}</span>
+                                <span class="comment-time">${replyTime}</span>
+                            </div>
+                            <div class="comment-body">${this._escapeHtml(replyContent)}</div>
+                        </div>`;
+                    }).join('');
+
+                    repliesHtml = `<div class="comment-replies">${replies}</div>`;
+                }
+
+                return `
+                <div class="general-comment-thread">
+                    <div class="comment-header">
+                        <div class="comment-header-left">
+                            <span class="comment-author">${this._escapeHtml(authorName)}</span>
+                            <span class="comment-time">${timeAgo}</span>
+                        </div>
+                        ${statusBadge ? `<div class="comment-header-right">${statusBadge}</div>` : ''}
+                    </div>
+                    <div class="comment-body">${this._escapeHtml(content)}</div>
+                    ${replyCount > 0 ? `<div class="comment-reply-count">${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</div>` : ''}
+                    ${repliesHtml}
+                </div>`;
+            })
+            .filter(html => html !== '')
+            .join('');
+
+        return `
+        <div class="general-comments-section">
+            <h3 class="section-title">General Comments (${generalThreads.length})</h3>
+            <div class="general-comments-list">
+                ${threadItems}
+            </div>
+        </div>`;
+    }
+
+    /**
+     * Format a date as time ago (e.g., "2h ago", "3d ago")
+     */
+    private _formatTimeAgo(date: Date): string {
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return "just now";
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    /**
+     * Clean up comment content by removing GUID mentions and formatting
+     */
+    private _cleanCommentContent(content: string): string {
+        // Remove GUID mentions like @<5B8B71B7-3EB7-6574-B377-A695965DBDA8>
+        // These appear when users are mentioned but can't be resolved
+        let cleaned = content.replaceAll(/@<[A-F0-9-]+>/gi, '@user');
+
+        // Trim whitespace
+        cleaned = cleaned.trim();
+
+        return cleaned;
+    }
+
+    /**
+     * Get human-readable label for thread status
+     */
+    private _getThreadStatusLabel(status: string | number | undefined | null): string {
+        const statusMap: { [key: string]: string } = {
+            "0": "Unknown",
+            "1": "Active",
+            "2": "Resolved",
+            "3": "Won't Fix",
+            "4": "Closed",
+            "5": "By Design",
+            "6": "Pending",
+        };
+        return status !== undefined && status !== null
+            ? statusMap[status.toString()] || "Unknown"
+            : "Unknown";
+    }
+
+    private _getFileChangesHtml(fileChanges: PRFileChange[], threads: PRThread[]): string {
+        if (fileChanges.length === 0) {
+            return `
+            <div class="file-changes-section">
+                <div class="empty-state" style="padding: 40px 20px; text-align: center;">No file changes available</div>
+            </div>`;
+        }
+
+        // Count comments per file
+        const commentCounts = this._countCommentsPerFile(threads);
 
         const fileItems = fileChanges
             .filter((change) => !change.item.isFolder)
@@ -1418,25 +2019,48 @@ export class PullRequestViewerPanel {
                     changeTypeText = "R";
                 }
 
-                // Display path with rename indicator if applicable
-                let displayPath = this._escapeHtml(change.item?.path);
+                // Extract filename and directory path
+                const fullPath = change.item?.path || '';
+                const pathParts = fullPath.split('/');
+                const fileName = pathParts.pop() || fullPath;
+                const dirPath = pathParts.join('/') || '/';
+
+                // Handle rename case
+                let displayFileName = fileName;
+                let displayDirPath = dirPath;
+
                 if (change.changeType?.includes("rename") && change.originalPath) {
                     const originalFileName = change.originalPath.split("/").pop() || change.originalPath;
-                    const newFileName = change.item?.path.split("/").pop() || change.item?.path;
-                    displayPath = `${this._escapeHtml(originalFileName)} → ${this._escapeHtml(newFileName)}`;
+                    displayFileName = `${this._escapeHtml(originalFileName)} → ${this._escapeHtml(fileName)}`;
                 }
+
+                // Normalize path for lookup - ensure it starts with /
+                let normalizedPath = change.item?.path || '';
+                if (!normalizedPath.startsWith('/')) {
+                    normalizedPath = `/${normalizedPath}`;
+                }
+
+                // Get comment count for this file
+                const commentCount = commentCounts.get(normalizedPath) || 0;
+                const commentSuffix = commentCount === 1 ? '' : 's';
+                const commentBadge = commentCount > 0
+                    ? `<span class="comment-count-badge" title="${commentCount} comment${commentSuffix}">💬 ${commentCount}</span>`
+                    : '';
 
                 return `
                 <li class="file-item" data-file-path="${this._escapeHtml(change.item?.path)}" data-change-type="${this._escapeHtml(change.changeType)}" data-original-path="${this._escapeHtml(change.originalPath || '')}" data-file-index="${index}">
                     <span class="file-change-type ${changeTypeClass}">${changeTypeText}</span>
-                    <span>${displayPath}</span>
+                    <div class="file-info">
+                        <span class="file-name">${this._escapeHtml(displayFileName)}</span>
+                        <span class="file-dir-path">${this._escapeHtml(displayDirPath)}</span>
+                    </div>
+                    ${commentBadge}
                 </li>`;
             })
             .join("");
 
         return `
-        <div class="section">
-            <h2 class="section-title" style="margin-bottom: 15px; padding-bottom: 8px; border-bottom: 1px solid var(--vscode-panel-border);">File Changes (${fileChanges.filter((c) => !c.item.isFolder).length})</h2>
+        <div class="file-changes-section">
             <ul class="file-list">
                 ${fileItems}
             </ul>
@@ -1451,6 +2075,27 @@ export class PullRequestViewerPanel {
             // Use event delegation to handle file clicks
             document.addEventListener('DOMContentLoaded', function() {
                 console.log('PR Viewer scripts loaded');
+
+                // Tab switching logic
+                const tabButtons = document.querySelectorAll('.tab-button');
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', function() {
+                        const tabName = this.getAttribute('data-tab');
+
+                        // Remove active class from all buttons and panels
+                        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+
+                        // Add active class to clicked button and corresponding panel
+                        this.classList.add('active');
+                        const panel = document.querySelector(\`[data-panel="\${tabName}"]\`);
+                        if (panel) {
+                            panel.classList.add('active');
+                        }
+
+                        console.log('Switched to tab:', tabName);
+                    });
+                });
 
                 // Add click handlers to all file items
                 document.addEventListener('click', function(event) {

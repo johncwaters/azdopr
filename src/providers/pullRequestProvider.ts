@@ -17,6 +17,8 @@ export class PullRequestProvider
 	private pullRequests: PullRequest[] = [];
 	private hasInitialized = false;
 	private isRefreshing = false;
+	private lastRefreshTime: number = 0;
+	private readonly MIN_REFRESH_INTERVAL_MS = 5000; // Prevent refresh loops by limiting to once per 5 seconds
 
 	constructor(
 		private readonly azureDevOpsClient: AzureDevOpsClient,
@@ -97,11 +99,19 @@ export class PullRequestProvider
 			// Show cached PRs immediately if available
 			const hasCachedData = this.pullRequests.length > 0 && !this.isRefreshing;
 			if (hasCachedData) {
-				this.refreshInBackground();
+				// Only trigger background refresh if enough time has passed since last refresh
+				// This prevents infinite refresh loops
+				const now = Date.now();
+				const timeSinceLastRefresh = now - this.lastRefreshTime;
+				if (timeSinceLastRefresh > this.MIN_REFRESH_INTERVAL_MS) {
+					this.lastRefreshTime = now;
+					this.refreshInBackground();
+				}
 				return this.getGroupedByProjectView();
 			}
 
 			// First load - wait for data
+			this.lastRefreshTime = Date.now();
 			await this.fetchPullRequests();
 
 			if (this.pullRequests.length === 0) {
@@ -132,6 +142,9 @@ export class PullRequestProvider
 		this.fetchPullRequests()
 			.then(() => {
 				this.isRefreshing = false;
+				// Update the last refresh time to prevent immediate re-trigger
+				this.lastRefreshTime = Date.now();
+				// Fire the tree data change to update the view with fresh data
 				this.refresh();
 			})
 			.catch(() => {

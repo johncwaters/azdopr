@@ -1,4 +1,4 @@
-import type { PullRequest, PRFileChange } from "./azureDevOpsClient";
+import type { PullRequest, PRFileChange, PRThread } from "./azureDevOpsClient";
 
 /**
  * Interface for PR iteration data
@@ -15,6 +15,7 @@ interface CachedPRData {
 	fullDetails: PullRequest;
 	iterations: PRIteration[];
 	fileChanges: PRFileChange[];
+	threads: PRThread[];
 	timestamp: number;
 }
 
@@ -84,13 +85,15 @@ export class PRCacheService {
 		pullRequestId: number,
 		fullDetails: PullRequest,
 		iterations: PRIteration[],
-		fileChanges: PRFileChange[]
+		fileChanges: PRFileChange[],
+		threads: PRThread[]
 	): void {
 		const key = this.getCacheKey(projectId, repositoryId, pullRequestId);
 		this.cache.set(key, {
 			fullDetails,
 			iterations,
 			fileChanges,
+			threads,
 			timestamp: Date.now(),
 		});
 	}

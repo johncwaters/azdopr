@@ -40,7 +40,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register the tree view
 	vscode.window.registerTreeDataProvider("azureDevOpsPRs", pullRequestProvider);
 
-	// Initialize the comment controller for displaying PR comments inline
+	// ========================================================================
+	// CRITICAL: Initialize the comment controller for displaying PR comments inline
+	// This controller manages VS Code's native Comment API to show Azure DevOps
+	// PR comments directly in diff views. Without proper initialization and event
+	// handling, comments will NOT appear when users open PR file diffs.
+	// DO NOT REMOVE OR MODIFY without understanding the full comment flow.
+	// ========================================================================
 	commentController = new PRCommentController(azureDevOpsClient);
 	// Initialize asynchronously (don't await to avoid blocking activation)
 	commentController.initialize();
@@ -164,6 +170,58 @@ export async function activate(context: vscode.ExtensionContext) {
 					isAuthenticated,
 				);
 				pullRequestProvider.refresh();
+			}
+		}),
+
+		// ========================================================================
+		// CRITICAL: Event listeners for inline comment display in PR diffs
+		// These listeners are ESSENTIAL for showing Azure DevOps comments inline
+		// in file diff views. They work by detecting when a PR diff document
+		// (scheme: "azdo-pr") is opened or becomes active, then loading comments
+		// from the Azure DevOps API and displaying them using VS Code's Comment API.
+		//
+		// How it works:
+		// 1. User clicks a file in the PR viewer's "Files Changed" tab
+		// 2. PullRequestViewerPanel creates virtual documents with "azdo-pr" scheme
+		// 3. These event listeners detect the document and trigger comment loading
+		// 4. PRCommentController fetches comments and displays them inline
+		//
+		// DO NOT REMOVE these listeners - comments will NOT appear without them!
+		// ========================================================================
+
+		// Listen for when text documents are opened (catches initial file opens)
+		vscode.workspace.onDidOpenTextDocument(async (document) => {
+			// Only process PR diff documents (identified by "azdo-pr" scheme)
+			if (document.uri.scheme === "azdo-pr") {
+				console.log(
+					`[Extension] PR diff document opened: ${document.uri.toString()}`,
+				);
+				try {
+					await commentController.loadCommentsForDocument(document);
+				} catch (error) {
+					console.error(
+						`[Extension] Failed to load comments for ${document.uri.toString()}:`,
+						error,
+					);
+				}
+			}
+		}),
+
+		// Listen for when the active editor changes (catches tab switches)
+		vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+			// Only process when an editor is active and contains a PR diff document
+			if (editor && editor.document.uri.scheme === "azdo-pr") {
+				console.log(
+					`[Extension] Active editor changed to PR diff: ${editor.document.uri.toString()}`,
+				);
+				try {
+					await commentController.loadCommentsForDocument(editor.document);
+				} catch (error) {
+					console.error(
+						`[Extension] Failed to load comments for ${editor.document.uri.toString()}:`,
+						error,
+					);
+				}
 			}
 		}),
 	];

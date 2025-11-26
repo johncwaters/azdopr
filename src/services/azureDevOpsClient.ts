@@ -281,11 +281,38 @@ export class AzureDevOpsClient {
 		projectId: string,
 		repositoryId: string,
 		pullRequestId: number,
-	): Promise<any> {
+	): Promise<PullRequest> {
 		const headers = await this.getAuthHeaders();
 		const url = `${this.getBaseUrl()}/${projectId}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}?api-version=7.0`;
 		const response = await this.axiosInstance.get(url, { headers });
-		return response.data;
+
+		// Transform the raw API response to match the PullRequest interface
+		const pr = response.data;
+		return {
+			pullRequestId: pr.pullRequestId,
+			title: pr.title,
+			description: pr.description || "",
+			createdBy: pr.createdBy,
+			creationDate: new Date(pr.creationDate),
+			status: pr.status,
+			repository: pr.repository,
+			reviewers: (pr.reviewers || []).map((reviewer: any) => ({
+				id: reviewer.id,
+				displayName: reviewer.displayName,
+				uniqueName: reviewer.uniqueName,
+				imageUrl: reviewer.imageUrl,
+				vote: reviewer.vote,
+				isRequired: reviewer.isRequired,
+			})),
+			url: pr.url
+				? pr.url
+						.replace("_apis/git/repositories", "_git")
+						.replace("/pullRequests/", "/pullrequest/")
+				: "",
+			sourceRefName: pr.sourceRefName || "",
+			targetRefName: pr.targetRefName || "",
+			isDraft: pr.isDraft || false,
+		};
 	}
 
 	async getPullRequestIterations(
