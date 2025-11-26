@@ -470,13 +470,30 @@ export class PullRequestViewerPanel {
             const isDeleted = changeType.includes("delete");
             const isRenamed = changeType.includes("rename");
 
-            // Get branch names
+            // Get branch names for display in URIs
             const sourceBranch = this.pullRequest.sourceRefName
                 ? this.pullRequest.sourceRefName.replace("refs/heads/", "")
                 : "unknown";
             const targetBranch = this.pullRequest.targetRefName
                 ? this.pullRequest.targetRefName.replace("refs/heads/", "")
                 : "unknown";
+
+            // Get commit SHAs or branch names for fetching files
+            // Prefer commit SHAs (more reliable), but fall back to branch names if not available
+            let sourceVersion = this.pullRequest.lastMergeSourceCommit?.commitId;
+            let targetVersion = this.pullRequest.lastMergeTargetCommit?.commitId;
+
+            if (!sourceVersion || !targetVersion) {
+                console.log("[PRViewerPanel] Commit SHAs not available, falling back to branch names");
+                sourceVersion = sourceBranch;
+                targetVersion = targetBranch;
+            }
+
+            console.log("[PRViewerPanel] Version information:", {
+                sourceVersion,
+                targetVersion,
+                usingCommitSHAs: !!this.pullRequest.lastMergeSourceCommit?.commitId,
+            });
 
             // Fetch both versions of the file
             await vscode.window.withProgress(
@@ -492,7 +509,7 @@ export class PullRequestViewerPanel {
                     let modifiedContent = "";
 
                     try {
-                        // Fetch base version (from target branch) unless file is added
+                        // Fetch base version (from target) unless file is added
                         if (!isAdded) {
                             progress.report({
                                 increment: 25,
@@ -500,15 +517,26 @@ export class PullRequestViewerPanel {
                             });
                             // Use originalPath for renamed files when fetching the base version
                             const basePathToFetch = isRenamed && originalPath ? originalPath : path;
-                            baseContent = await this.azureDevOpsClient.getFileContent(
-                                this.pullRequest.repository.project.id,
-                                this.pullRequest.repository.id,
-                                basePathToFetch,
-                                targetBranch,
-                            );
+                            try {
+                                baseContent = await this.azureDevOpsClient.getFileContent(
+                                    this.pullRequest.repository.project.id,
+                                    this.pullRequest.repository.id,
+                                    basePathToFetch,
+                                    targetVersion,
+                                );
+                            } catch (error) {
+                                // If base file doesn't exist (404), treat as new file (empty base content)
+                                // This handles cases where Azure DevOps reports changeType as "edit" for new files
+                                if (error instanceof Error && error.message.includes("File not found")) {
+                                    console.log(`[PRViewerPanel] Base file not found, treating as new file: ${basePathToFetch}`);
+                                    baseContent = "";
+                                } else {
+                                    throw error;
+                                }
+                            }
                         }
 
-                        // Fetch modified version (from source branch) unless file is deleted
+                        // Fetch modified version (from source) unless file is deleted
                         if (!isDeleted) {
                             progress.report({
                                 increment: 50,
@@ -518,7 +546,7 @@ export class PullRequestViewerPanel {
                                 this.pullRequest.repository.project.id,
                                 this.pullRequest.repository.id,
                                 path,
-                                sourceBranch,
+                                sourceVersion,
                             );
                         }
 
@@ -617,8 +645,15 @@ export class PullRequestViewerPanel {
                         progress.report({ increment: 100 });
                         console.log("Diff view opened successfully for:", path);
                     } catch (error) {
+                        // Log the full error details for debugging
+                        console.error("[PRViewerPanel] Error fetching file content - Full error details:", error);
+                        if (error instanceof Error) {
+                            console.error("[PRViewerPanel] Error message:", error.message);
+                            console.error("[PRViewerPanel] Error stack:", error.stack);
+                        }
+
                         const friendlyMessage = this._getFriendlyErrorMessage(error);
-                        console.error("Error fetching file content:", error);
+                        console.error("[PRViewerPanel] Friendly error message:", friendlyMessage);
 
                         // Offer to view in browser as fallback
                         const action = await vscode.window.showErrorMessage(
@@ -1477,7 +1512,7 @@ export class PullRequestViewerPanel {
         cacheInfo: { isCached: boolean; ageInSeconds?: number },
     ): string {
         const statusClass = pr.isDraft ? "status-draft" : "status-active";
-        const statusText = pr.isDraft ? "Draft" : pr.status;
+        const statusText = pr.isDraft ? "draft" : pr.status;
 
         // Build the PR URL
         const org = vscode.workspace

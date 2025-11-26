@@ -32,6 +32,12 @@ export interface PullRequest {
 	sourceRefName: string;
 	targetRefName: string;
 	isDraft: boolean;
+	lastMergeSourceCommit?: {
+		commitId: string;
+	};
+	lastMergeTargetCommit?: {
+		commitId: string;
+	};
 }
 
 export interface Project {
@@ -102,6 +108,7 @@ export interface PRComment {
 	id: number;
 	parentCommentId: number;
 	author: {
+		id: string;
 		displayName: string;
 		uniqueName: string;
 		imageUrl?: string;
@@ -161,6 +168,14 @@ export class AzureDevOpsClient {
 			throw new Error("Organization not configured");
 		}
 		return `https://dev.azure.com/${this.organization}`;
+	}
+
+	/**
+	 * Get the organization URL
+	 * @returns The base organization URL
+	 */
+	public getOrganizationUrl(): string {
+		return this.getBaseUrl();
 	}
 
 	private async cachedFetch<T>(
@@ -632,6 +647,93 @@ export class AzureDevOpsClient {
 	}
 
 	/**
+	 * Update an existing comment in a PR thread
+	 * @param projectId The project ID
+	 * @param repositoryId The repository ID
+	 * @param pullRequestId The pull request ID
+	 * @param threadId The thread ID
+	 * @param commentId The comment ID to update
+	 * @param commentText The new comment text
+	 * @returns The updated comment
+	 */
+	async updateComment(
+		projectId: string,
+		repositoryId: string,
+		pullRequestId: number,
+		threadId: number,
+		commentId: number,
+		commentText: string,
+	): Promise<PRComment> {
+		const headers = await this.getAuthHeaders();
+		const url = `${this.getBaseUrl()}/${projectId}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}/threads/${threadId}/comments/${commentId}?api-version=7.0`;
+
+		const requestBody = {
+			content: commentText,
+		};
+
+		const response = await this.axiosInstance.patch(url, requestBody, {
+			headers,
+		});
+
+		const comment = response.data;
+		return {
+			id: comment.id,
+			parentCommentId: comment.parentCommentId,
+			author: comment.author,
+			content: comment.content,
+			publishedDate: new Date(comment.publishedDate),
+			lastUpdatedDate: new Date(comment.lastUpdatedDate),
+			commentType: comment.commentType,
+		};
+	}
+
+	/**
+	 * Delete a comment from a PR thread
+	 * @param projectId The project ID
+	 * @param repositoryId The repository ID
+	 * @param pullRequestId The pull request ID
+	 * @param threadId The thread ID
+	 * @param commentId The comment ID to delete
+	 */
+	async deleteComment(
+		projectId: string,
+		repositoryId: string,
+		pullRequestId: number,
+		threadId: number,
+		commentId: number,
+	): Promise<void> {
+		const headers = await this.getAuthHeaders();
+		const url = `${this.getBaseUrl()}/${projectId}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}/threads/${threadId}/comments/${commentId}?api-version=7.0`;
+
+		await this.axiosInstance.delete(url, { headers });
+	}
+
+	/**
+	 * Update PR thread status (resolve/unresolve)
+	 * @param projectId The project ID
+	 * @param repositoryId The repository ID
+	 * @param pullRequestId The pull request ID
+	 * @param threadId The thread ID
+	 * @param status The new status (1 = Active, 2 = Fixed/Resolved, 4 = Closed)
+	 */
+	async updateThreadStatus(
+		projectId: string,
+		repositoryId: string,
+		pullRequestId: number,
+		threadId: number,
+		status: number,
+	): Promise<void> {
+		const headers = await this.getAuthHeaders();
+		const url = `${this.getBaseUrl()}/${projectId}/_apis/git/repositories/${repositoryId}/pullrequests/${pullRequestId}/threads/${threadId}?api-version=7.0`;
+
+		const requestBody = {
+			status,
+		};
+
+		await this.axiosInstance.patch(url, requestBody, { headers });
+	}
+
+	/**
 	 * Fetch file content from Azure DevOps repository at a specific version
 	 * @param projectId The project ID
 	 * @param repositoryId The repository ID
@@ -647,9 +749,35 @@ export class AzureDevOpsClient {
 	): Promise<string> {
 		try {
 			const headers = await this.getAuthHeaders();
-			const encodedPath = encodeURIComponent(path);
+			// Azure DevOps Git Items API expects paths without leading slash
+			// Strip leading slash if present
+			const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+
+			// Encode each path segment separately to preserve forward slashes
+			// This handles paths with spaces like "LaunchPoint Core/Wiki/file.md"
+			const encodedPath = normalizedPath
+				.split('/')
+				.map(segment => encodeURIComponent(segment))
+				.join('/');
+
+			// Determine versionType based on version format
+			// If version looks like a SHA (40 hex chars), use commit, otherwise use branch
+			const versionType = /^[0-9a-f]{40}$/i.test(version) ? "commit" : "branch";
+
+			// Don't encode the version parameter - Azure DevOps API expects plain branch names
+			// e.g., "main" not "main" encoded
+			const versionParam = version;
+
 			// Add includeContent=true to get the actual file content
-			const url = `${this.getBaseUrl()}/${projectId}/_apis/git/repositories/${repositoryId}/items?path=${encodedPath}&version=${version}&includeContent=true&api-version=7.0`;
+			const url = `${this.getBaseUrl()}/${projectId}/_apis/git/repositories/${repositoryId}/items?path=${encodedPath}&versionType=${versionType}&version=${versionParam}&includeContent=true&api-version=7.0`;
+
+			console.log('[AzureDevOpsClient] Fetching file:', {
+				originalPath: path,
+				encodedPath,
+				version,
+				versionType,
+				url
+			});
 
 			const response = await this.axiosInstance.get(url, { headers });
 
@@ -686,8 +814,16 @@ export class AzureDevOpsClient {
 			// If we get here, something unexpected happened
 			throw new Error(`Unexpected response format for file: ${path}`);
 		} catch (error) {
-			if (axios.isAxiosError(error) && error.response?.status === 404) {
-				throw new Error(`File not found: ${path}`);
+			if (axios.isAxiosError(error)) {
+				console.error('[AzureDevOpsClient] Error fetching file:', {
+					path,
+					status: error.response?.status,
+					statusText: error.response?.statusText,
+					data: error.response?.data
+				});
+				if (error.response?.status === 404) {
+					throw new Error(`File not found: ${path}`);
+				}
 			}
 			throw error;
 		}
