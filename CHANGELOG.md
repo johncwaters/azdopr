@@ -2,6 +2,35 @@
 
 All notable changes to the Azure DevOps PR Viewer extension.
 
+## [1.3.0] - 2025-12-10
+
+### Added
+
+- **Comment timestamps** - Comments now display when they were posted with relative time formatting (e.g., "2 hours ago")
+- **Comment labels** - Pending and draft comments are visually distinguished with status labels
+- **Edit comments** - Users can now edit their own comments directly from the comment thread
+- **Delete comments** - Users can delete their own comments with proper permission checks
+- **Resolve/Unresolve threads** - Thread resolution state management with resolve and unresolve commands
+- **Comment event coordination** - New `CommentEventCoordinator` service for centralized comment event handling
+- **Enhanced comment formatting** - Improved markdown processing and comment display with new `CommentFormatter` utility
+- **Type-safe comment structures** - Added dedicated TypeScript types for comments and threads
+
+### Changed
+
+- **Refactored comment architecture** - Reorganized comment-related code into specialized services and utilities
+  - Introduced `commentEventCoordinator.ts` for coordinating comment updates and events
+  - Created `commentFormatter.ts` for consistent comment rendering
+  - Split type definitions into `commentThread.ts` and `comments.ts` for better organization
+- **Enhanced comment permissions** - Context-aware menu items that appear only when users have appropriate permissions
+  - Edit button visible only for user's own comments
+  - Delete button visible only for user's own comments
+- **Improved comment controller** - Enhanced `PRCommentController` with better state management and event handling
+- **Updated comment provider** - Refined `PRCommentsProvider` for more efficient comment data management
+
+### Removed
+
+- **Conventional comments** - Removed `conventionalComments.ts` in favor of more flexible comment formatting system
+
 ## [1.2.0] - 2025-01-21
 
 ### Added
