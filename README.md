@@ -1,97 +1,77 @@
 # Azure DevOps PR Viewer
 
-View all Pull Requests across your Azure DevOps organization in VS Code.
+**Stop switching between VS Code and your browser to review pull requests.**
 
-## Features
+Azure DevOps PR Viewer brings all your organization's pull requests directly into VS Code. Review code, add comments, and manage PRs without ever leaving your editor.
 
-- View all PRs across all projects and repositories in your organization
-- Filter PRs to specific projects for focused workflow
-- Microsoft Entra ID authentication
-- PRs grouped by Project → Repository → Pull Request
-- View and diff PR files without local checkout
-- Add inline comments directly to PR diffs using VS Code's native commenting API
-- Auto-refresh with intelligent caching for improved performance
-- Short-term cache for PR details (5-minute TTL) to optimize repeated views
-- Manual refresh options
+## What is this?
 
-## Quick Start
+If you work with Azure DevOps and spend time reviewing pull requests, this extension is for you. It gives you a complete view of every pull request across your entire organization—all projects, all repositories—in one convenient sidebar.
 
-### 1. Configure Your Organization
+## Why use it?
 
-Click the gear icon (⚙️) in the Azure DevOps PR Viewer sidebar and enter your organization name.
+**Stay in your workflow**
+No more context switching. Review PRs in the same window where you write code.
 
-**How to find your organization name:**
+**See everything at once**
+Get a bird's-eye view of all active pull requests across your organization. Never miss an important review.
 
-- If your URL is `https://dev.azure.com/myorg` → enter `myorg`
-- If your URL is `https://myorg.visualstudio.com` → enter `myorg`
+**Review faster**
+View file changes, add inline comments, and resolve threads right in VS Code. Everything you need for code review in one place.
 
-### 2. Sign In
+**Work your way**
+Focus on specific projects when you need to, or see everything when you want the big picture.
 
-1. Click "Sign in to Azure DevOps PR Viewer"
-2. Authenticate with your Microsoft account
-3. Approve Azure DevOps permissions
+## Getting Started
 
-Your PRs will load automatically.
+### Step 1: Tell it your organization
 
-## Settings
+Open the extension settings and enter your Azure DevOps organization name.
 
-- `azureDevOpsPRViewer.organization`: Your Azure DevOps organization name
-- `azureDevOpsPRViewer.autoRefreshInterval`: Auto-refresh interval in seconds (default: 300, set to 0 to disable)
-- `azureDevOpsPRViewer.maxPRsToFetch`: Maximum PRs to fetch per project (default: 500)
-- `azureDevOpsPRViewer.includedProjects`: Filter to specific projects (default: [], empty array = all projects)
-- `azureDevOpsPRViewer.commentsAutoRefreshInterval`: Auto-refresh interval for comments in seconds (default: 30, set to 0 to disable)
+Find it in your Azure DevOps URL:
+- `https://dev.azure.com/myorg` → your organization is `myorg`
+- `https://myorg.visualstudio.com` → your organization is `myorg`
 
-## Usage
+### Step 2: Sign in
 
-### View PRs
+Click "Sign In" in the sidebar and authenticate with your Microsoft account. That's it—your pull requests will appear automatically.
 
-PRs are displayed hierarchically:
+## What can you do?
 
-- Projects (sorted alphabetically)
-- Repositories within each project (sorted alphabetically)
-- PRs within each repository (sorted by age, oldest first)
+### Browse all your pull requests
 
-Click any PR to view details. Right-click to open in browser.
+All PRs are organized by project and repository, so you can quickly find what you're looking for. Click any PR to see its details and file changes.
 
-### Add Comments to PR Diffs
+### Review code changes
 
-1. Click on a file in the PR viewer to open the diff
-2. Hover over any line to see the comment icon (+)
-3. Click the comment icon and enter your comment
+Click a file to see exactly what changed, just like you would in Azure DevOps. The side-by-side diff makes it easy to spot issues.
 
-Comments are displayed inline using VS Code's native commenting system, showing existing PR comments and allowing you to add new ones directly to Azure DevOps.
+### Comment on code
 
-### Refresh PR Data
+See a problem or want to suggest something? Hover over any line and click the comment icon. Your comment goes straight to Azure DevOps where the author can see it.
 
-Click the "Refresh" button in the PR header to force a fresh data fetch from Azure DevOps. The button's tooltip shows cache status:
-- "Cached X seconds/minutes ago" - Data is from cache
-- "Fresh data loaded" - Data was just fetched from API
+### Edit and manage comments
 
-### Troubleshooting
+Made a typo? Click the edit button on your own comments to fix them. You can also delete your comments or mark entire discussion threads as resolved.
 
-**Authentication Issues:**
+### Stay up to date
 
-- Sign out and back in from the Command Palette
-- Ensure your Microsoft account has access to your Azure DevOps organization
-- Verify your organization is connected to Microsoft Entra ID
+The extension automatically refreshes so you always see the latest PRs and comments. You can also click the refresh button anytime you want to check for updates.
 
-**PRs Not Loading:**
+### Focus on what matters
 
-- Click the refresh icon in the sidebar
-- Check Output panel (View → Output) → "Azure DevOps PR Viewer" for errors
-- Verify your organization name in settings
+Have dozens of projects but only work on a few? Use the project filter in settings to show only the PRs you care about.
 
-## Release Notes
+## Common Questions
 
-### 1.2.0
+**Do I need to clone repositories to review them?**
+No! You can view and review any PR without having the code on your machine.
 
-- Added project filtering to focus on specific projects
-- Improved performance with intelligent caching and parallel data fetching
-- Refactored commenting system to use VS Code's native Comments API
-- Added auto-refresh for comments
-- Simplified UI with shorter command titles
-- Fixed marketplace display with proper icon and repository URL
+**Can I approve or reject PRs?**
+Currently you can view PRs, see file changes, and add comments. Voting/approval features may be added in future updates.
 
-### 1.0.0
+**Will it slow down VS Code?**
+The extension uses smart caching to stay fast. It only fetches new data when needed and shows you cached results instantly.
 
-Initial release
+**Something not working?**
+Check the Output panel (View → Output, then select "Azure DevOps PR Viewer") to see what's happening. Most issues are related to organization name typos or authentication.
