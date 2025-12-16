@@ -1,5 +1,7 @@
 # Azure DevOps PR Viewer
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **Stop switching between VS Code and your browser to review pull requests.**
 
 Azure DevOps PR Viewer brings all your organization's pull requests directly into VS Code. Review code, add comments, and manage PRs without ever leaving your editor.
@@ -92,6 +94,22 @@ The extension automatically refreshes so you always see the latest PRs and comme
 ### Focus on what matters
 
 Have dozens of projects but only work on a few? Use the project filter in settings to show only the PRs you care about.
+
+## Contributing
+
+We welcome contributions from the community! Whether it's bug fixes, new features, or documentation improvements, your help is appreciated.
+
+To get started:
+
+1. Read our [Contributing Guidelines](CONTRIBUTING.md) for development setup and workflow
+2. Look for issues labeled `good first issue` or `help wanted`
+3. Feel free to open an issue to discuss your ideas before starting work
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2025 John C. Waters
 
 ## Common Questions
 

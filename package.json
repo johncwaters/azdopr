@@ -3,8 +3,12 @@
   "displayName": "Azure DevOps PR Viewer",
   "description": "View all Pull Requests across your entire Azure DevOps organization in one place",
   "version": "1.5.1",
+  "author": "John C. Waters",
   "publisher": "johncwaters",
+  "license": "MIT",
   "repository": "https://github.com/johncwaters/azdopr",
+  "bugs": "https://github.com/johncwaters/azdopr/issues",
+  "homepage": "https://github.com/johncwaters/azdopr#readme",
   "icon": "resources/azdopr-icon.png",
   "engines": {
     "vscode": "^1.105.0"

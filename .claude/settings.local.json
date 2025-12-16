@@ -7,7 +7,10 @@
       "Bash(npm install:*)",
       "Bash(find:*)",
       "Bash(npm run lint)",
-      "Bash(npx biome:*)"
+      "Bash(npx biome:*)",
+      "Bash(tree:*)",
+      "Bash(git rm:*)",
+      "Bash(del .env)"
     ],
     "deny": [],
     "ask": []

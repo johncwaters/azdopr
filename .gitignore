@@ -1,5 +1,31 @@
-out
-dist
-node_modules
-.vscode-test/
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Claude AI configuration
+.claude/
+
+# Build outputs
+out/
+dist/
 *.vsix
+
+# Dependencies
+node_modules/
+.vscode-test/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cache directories
+.cache/
+.temp/
