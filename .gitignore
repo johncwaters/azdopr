@@ -29,3 +29,6 @@ Thumbs.db
 # Cache directories
 .cache/
 .temp/
+
+# Windows device name artifacts
+nul
