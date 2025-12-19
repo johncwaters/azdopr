@@ -1,10 +1,13 @@
 import * as vscode from "vscode";
 import { AzureDevOpsAuthProvider } from "./auth/authProvider";
+import { CheckoutBranchCommandHandler } from "./commands/checkoutBranchCommand";
 import { PRCommentController } from "./providers/prCommentController";
 import { PullRequestProvider } from "./providers/pullRequestProvider";
 import { AzureDevOpsClient, type PullRequest } from "./services/azureDevOpsClient";
 import { CommentEventCoordinator } from "./services/commentEventCoordinator";
+import { GitService } from "./services/gitService";
 import { LfsCache } from "./services/lfs/lfsCache";
+import { RepositoryMatchingService } from "./services/repositoryMatchingService";
 import { Logger } from "./utils/logger";
 import { PullRequestViewerPanel } from "./views/pullRequestViewerPanel";
 
@@ -135,6 +138,21 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Initialize event coordinator for debounced comment loading
 	commentEventCoordinator = new CommentEventCoordinator(commentController);
 
+	// Initialize Git services for branch checkout
+	const gitService = new GitService();
+	const gitAvailable = await gitService.initialize();
+
+	if (!gitAvailable) {
+		logger.warn("Git extension not available - checkout features disabled");
+	}
+
+	const config = vscode.workspace.getConfiguration("azureDevOpsPRViewer");
+	const organization = config.get<string>("organization", "");
+
+	const repositoryMatchingService = new RepositoryMatchingService(gitService, organization);
+
+	const checkoutHandler = new CheckoutBranchCommandHandler(gitService, repositoryMatchingService);
+
 	// Collect all subscriptions
 	const subscriptions = [
 		vscode.commands.registerCommand("azureDevOpsPRs.refreshComments", async () => {
@@ -226,6 +244,18 @@ export async function activate(context: vscode.ExtensionContext) {
 				);
 			}
 		}),
+		vscode.commands.registerCommand(
+			"azureDevOpsPRs.checkoutBranch",
+			async (arg: string | { pullRequest: PullRequest } | PullRequest | undefined) => {
+				const pr = extractPullRequest(arg);
+				if (!pr) {
+					vscode.window.showErrorMessage("Unable to checkout: invalid PR");
+					return;
+				}
+
+				await checkoutHandler.execute(pr);
+			},
+		),
 		// Watch for configuration changes
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration("azureDevOpsPRViewer.autoRefreshInterval")) {

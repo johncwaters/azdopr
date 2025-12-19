@@ -81,6 +81,12 @@
         "command": "azureDevOpsPRs.clearLfsCache",
         "title": "Clear LFS File Cache",
         "category": "Azure DevOps PR Viewer"
+      },
+      {
+        "command": "azureDevOpsPRs.checkoutBranch",
+        "title": "Checkout Branch Locally",
+        "category": "Azure DevOps PR Viewer",
+        "icon": "$(git-branch)"
       }
     ],
     "viewsContainers": {
@@ -109,7 +115,13 @@
           "group": "navigation@1"
         }
       ],
-      "view/item/context": [],
+      "view/item/context": [
+        {
+          "command": "azureDevOpsPRs.checkoutBranch",
+          "when": "view == azureDevOpsPRs && viewItem == pullrequest",
+          "group": "navigation"
+        }
+      ],
       "comments/commentThread/context": [
         {
           "command": "azdo-pr-comments.createOrReplyComment",
