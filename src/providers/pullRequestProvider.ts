@@ -246,7 +246,10 @@ export class PullRequestProvider implements vscode.TreeDataProvider<PRTreeItem> 
 			);
 			projectItem.contextValue = "project";
 			projectItem.children = repoItems;
-			projectItem.iconPath = new vscode.ThemeIcon("project", new vscode.ThemeColor("charts.purple"));
+			projectItem.iconPath = new vscode.ThemeIcon(
+				"project",
+				new vscode.ThemeColor("charts.purple"),
+			);
 
 			projectItems.push(projectItem);
 		}
@@ -269,9 +272,15 @@ export class PullRequestProvider implements vscode.TreeDataProvider<PRTreeItem> 
 
 		// Set icon based on PR status
 		if (pr.isDraft) {
-			item.iconPath = new vscode.ThemeIcon("git-pull-request-draft", new vscode.ThemeColor("charts.gray"));
+			item.iconPath = new vscode.ThemeIcon(
+				"git-pull-request-draft",
+				new vscode.ThemeColor("charts.gray"),
+			);
 		} else {
-			item.iconPath = new vscode.ThemeIcon("git-pull-request", new vscode.ThemeColor("charts.green"));
+			item.iconPath = new vscode.ThemeIcon(
+				"git-pull-request",
+				new vscode.ThemeColor("charts.green"),
+			);
 		}
 
 		// Set context value for menu actions

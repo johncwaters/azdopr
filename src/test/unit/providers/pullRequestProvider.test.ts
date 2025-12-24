@@ -56,7 +56,7 @@ suite("PullRequestProvider - Status Badges", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: Testing private method
 			const badges = (provider as any).getPRStatusBadges(pr);
 
-			assert.ok(badges.includes("✓"), "Should include check badge");
+			assert.ok(badges.includes("✅"), "Should include check badge");
 			assert.strictEqual(badges.length, 1, "Should have exactly one badge");
 		});
 
@@ -83,7 +83,7 @@ suite("PullRequestProvider - Status Badges", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: Testing private method
 			const badges = (provider as any).getPRStatusBadges(pr);
 
-			assert.ok(badges.includes("✓"), "Should include check badge");
+			assert.ok(badges.includes("✅"), "Should include check badge");
 		});
 
 		test("should show rejected badge when user rejected PR", async () => {
@@ -109,7 +109,7 @@ suite("PullRequestProvider - Status Badges", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: Testing private method
 			const badges = (provider as any).getPRStatusBadges(pr);
 
-			assert.ok(badges.includes("✗"), "Should include X badge");
+			assert.ok(badges.includes("❌"), "Should include X badge");
 		});
 
 		test("should show error badge when others rejected", async () => {
@@ -135,7 +135,7 @@ suite("PullRequestProvider - Status Badges", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: Testing private method
 			const badges = (provider as any).getPRStatusBadges(pr);
 
-			assert.ok(badges.includes("⚠"), "Should include warning badge");
+			assert.ok(badges.includes("🚫"), "Should include warning badge");
 		});
 
 		test("should show clock badge when waiting for author", async () => {
@@ -161,7 +161,7 @@ suite("PullRequestProvider - Status Badges", () => {
 			// biome-ignore lint/suspicious/noExplicitAny: Testing private method
 			const badges = (provider as any).getPRStatusBadges(pr);
 
-			assert.ok(badges.includes("⏰"), "Should include clock badge");
+			assert.ok(badges.includes("⏳"), "Should include clock badge");
 		});
 
 		test("should show multiple badges in correct order", async () => {
@@ -196,8 +196,8 @@ suite("PullRequestProvider - Status Badges", () => {
 			const badges = (provider as any).getPRStatusBadges(pr);
 
 			assert.strictEqual(badges.length, 2, "Should have two badges");
-			assert.strictEqual(badges[0], "✓", "First badge should be check");
-			assert.strictEqual(badges[1], "⚠", "Second badge should be warning");
+			assert.strictEqual(badges[0], "✅", "First badge should be check");
+			assert.strictEqual(badges[1], "🚫", "Second badge should be warning");
 		});
 
 		test("should handle no reviewers gracefully", async () => {
@@ -242,7 +242,7 @@ suite("PullRequestProvider - Status Badges", () => {
 			const badges = (provider as any).getPRStatusBadges(pr);
 
 			// Should not include check badge since current user is not a reviewer
-			assert.ok(!badges.includes("✓"), "Should not include check badge");
+			assert.ok(!badges.includes("✅"), "Should not include check badge");
 		});
 
 		test("should handle current user fetch failure", async () => {
@@ -308,8 +308,8 @@ suite("PullRequestProvider - Status Badges", () => {
 			const badges = (provider as any).getPRStatusBadges(pr);
 
 			// Should only show error badge, not clock badge
-			assert.ok(badges.includes("⚠"), "Should include warning badge");
-			assert.ok(!badges.includes("⏰"), "Should not include clock badge");
+			assert.ok(badges.includes("🚫"), "Should include warning badge");
+			assert.ok(!badges.includes("⏳"), "Should not include clock badge");
 		});
 
 		test("should not show badge when user has no vote", async () => {
@@ -336,8 +336,8 @@ suite("PullRequestProvider - Status Badges", () => {
 			const badges = (provider as any).getPRStatusBadges(pr);
 
 			// Should not include any badge for no vote
-			assert.ok(!badges.includes("✓"), "Should not include check badge");
-			assert.ok(!badges.includes("✗"), "Should not include X badge");
+			assert.ok(!badges.includes("✅"), "Should not include check badge");
+			assert.ok(!badges.includes("❌"), "Should not include X badge");
 		});
 
 		test("should handle undefined reviewers array", async () => {
