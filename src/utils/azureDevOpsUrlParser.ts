@@ -36,11 +36,6 @@ export class AzureDevOpsUrlParser {
 		const httpsDevMatch = remoteUrl.match(
 			/https:\/\/(?:.*@)?dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/\s]+)/,
 		);
-		// https://dev.azure.com/{org}/{project}/_git/{repo}
-		// https://{user}@dev.azure.com/{org}/{project}/_git/{repo}
-		const httpsDevMatch = remoteUrl.match(
-			/https:\/\/(?:.*@)?dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/\s]+)/,
-		);
 		if (httpsDevMatch) {
 			return {
 				organization: httpsDevMatch[1],

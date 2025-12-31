@@ -506,12 +506,18 @@ export class PullRequestViewerPanel {
 			const repositoryId = this.pullRequest.repository.id;
 			const prId = this.pullRequest.pullRequestId;
 
+			// Normalize path to match the format used in file list rendering
+			let normalizedPath = filePath;
+			if (!normalizedPath.startsWith("/")) {
+				normalizedPath = `/${normalizedPath}`;
+			}
+
 			// Toggle the reviewed state
 			const newState = await PullRequestViewerPanel._reviewedFilesService.toggleFileReviewed(
 				projectId,
 				repositoryId,
 				prId,
-				filePath,
+				normalizedPath,
 			);
 
 			// Send updated state back to webview for dynamic UI update
@@ -521,7 +527,7 @@ export class PullRequestViewerPanel {
 				reviewed: newState,
 			});
 
-			logger.debug(`Toggled reviewed state for ${filePath}: ${newState}`);
+			logger.debug(`Toggled reviewed state for ${normalizedPath}: ${newState}`);
 		} catch (error) {
 			logger.error("Error toggling reviewed state:", error);
 		}
@@ -741,13 +747,25 @@ export class PullRequestViewerPanel {
 
 						// Mark file as reviewed
 						if (PullRequestViewerPanel._reviewedFilesService) {
+							// Normalize path to match the format used in file list rendering
+							let normalizedPath = path;
+							if (!normalizedPath.startsWith("/")) {
+								normalizedPath = `/${normalizedPath}`;
+							}
 							await PullRequestViewerPanel._reviewedFilesService.markAsReviewed(
 								this.pullRequest.repository.project.id,
 								this.pullRequest.repository.id,
 								this.pullRequest.pullRequestId,
-								path,
+								normalizedPath,
 							);
-							logger.debug(`Marked file as reviewed: ${path}`);
+							logger.debug(`Marked file as reviewed: ${normalizedPath}`);
+
+							// Send message to webview to update UI dynamically
+							this._panel.webview.postMessage({
+								command: "fileReviewedStateChanged",
+								filePath: path,
+								reviewed: true,
+							});
 						}
 
 						progress.report({ increment: 100 });
@@ -1251,19 +1269,30 @@ export class PullRequestViewerPanel {
                 justify-content: center;
                 width: 20px;
                 height: 20px;
-                background-color: var(--vscode-testing-iconPassed);
-                color: white;
                 border-radius: 50%;
                 font-size: 12px;
                 font-weight: bold;
-                margin-left: auto;
-                margin-right: 4px;
+                margin-left: 4px;
                 cursor: pointer;
                 flex-shrink: 0;
-                transition: opacity 0.2s;
+                transition: all 0.2s;
+            }
+            /* Reviewed state - filled green circle */
+            .reviewed-badge.reviewed {
+                background-color: var(--vscode-testing-iconPassed);
+                color: white;
+                border: 2px solid var(--vscode-testing-iconPassed);
+            }
+            /* Not reviewed state - outline only */
+            .reviewed-badge.not-reviewed {
+                background-color: transparent;
+                color: var(--vscode-descriptionForeground);
+                border: 2px solid var(--vscode-descriptionForeground);
+                opacity: 0.5;
             }
             .reviewed-badge:hover {
-                opacity: 0.8;
+                opacity: 1 !important;
+                transform: scale(1.1);
             }
             .file-change-type {
                 font-size: 11px;
@@ -2246,9 +2275,12 @@ export class PullRequestViewerPanel {
 						normalizedPath,
 					) || false;
 
-				const reviewedBadge = isReviewed
-					? '<span class="reviewed-badge" data-action="toggle-reviewed" title="Mark as not reviewed">✓</span>'
-					: "";
+				// Always show reviewed badge (filled when reviewed, outline when not)
+				const reviewedClass = isReviewed ? "reviewed-badge reviewed" : "reviewed-badge not-reviewed";
+				const reviewedTitle = isReviewed
+					? "Reviewed - Click to mark as not reviewed"
+					: "Not reviewed - Click to mark as reviewed";
+				const reviewedBadge = `<span class="${reviewedClass}" data-action="toggle-reviewed" title="${reviewedTitle}">✓</span>`;
 
 				return `
                 <li class="file-item" data-file-path="${this._escapeHtml(change.item?.path)}" data-change-type="${this._escapeHtml(change.changeType)}" data-original-path="${this._escapeHtml(change.originalPath || "")}" data-file-index="${index}">
@@ -2257,8 +2289,8 @@ export class PullRequestViewerPanel {
                         <span class="file-name">${this._escapeHtml(displayFileName)}</span>
                         <span class="file-dir-path">${this._escapeHtml(displayDirPath)}</span>
                     </div>
-                    ${reviewedBadge}
                     ${commentBadge}
+                    ${reviewedBadge}
                 </li>`;
 			})
 			.join("");
@@ -2407,32 +2439,20 @@ export class PullRequestViewerPanel {
                         );
 
                         if (fileItem) {
-                            const existingBadge = fileItem.querySelector('.reviewed-badge');
-                            const commentBadge = fileItem.querySelector('.comment-count-badge');
-                            const fileInfo = fileItem.querySelector('.file-info');
+                            const badge = fileItem.querySelector('.reviewed-badge');
 
-                            if (message.reviewed && !existingBadge) {
-                                // Add reviewed badge
-                                const badge = document.createElement('span');
-                                badge.className = 'reviewed-badge';
-                                badge.setAttribute('data-action', 'toggle-reviewed');
-                                badge.setAttribute('title', 'Mark as not reviewed');
-                                badge.textContent = '✓';
-
-                                // Insert before comment badge if it exists, otherwise append
-                                if (commentBadge) {
-                                    fileItem.insertBefore(badge, commentBadge);
-                                } else if (fileInfo) {
-                                    fileInfo.insertAdjacentElement('afterend', badge);
+                            if (badge) {
+                                // Toggle classes and update tooltip
+                                if (message.reviewed) {
+                                    badge.classList.remove('not-reviewed');
+                                    badge.classList.add('reviewed');
+                                    badge.setAttribute('title', 'Reviewed - Click to mark as not reviewed');
                                 } else {
-                                    fileItem.appendChild(badge);
+                                    badge.classList.remove('reviewed');
+                                    badge.classList.add('not-reviewed');
+                                    badge.setAttribute('title', 'Not reviewed - Click to mark as reviewed');
                                 }
-
-                                console.log('Added reviewed badge for:', message.filePath);
-                            } else if (!message.reviewed && existingBadge) {
-                                // Remove reviewed badge
-                                existingBadge.remove();
-                                console.log('Removed reviewed badge for:', message.filePath);
+                                console.log('Updated reviewed state for:', message.filePath, 'reviewed:', message.reviewed);
                             }
                         }
                     }

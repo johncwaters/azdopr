@@ -20,6 +20,7 @@ let refreshInterval: NodeJS.Timeout | undefined;
 let azureDevOpsClient: AzureDevOpsClient;
 let commentController: PRCommentController;
 let commentEventCoordinator: CommentEventCoordinator;
+let reviewedFilesService: ReviewedFilesService;
 
 /**
  * Helper: Extract PullRequest from various command argument formats
