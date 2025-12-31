@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { PRComment } from "../services/azureDevOpsClient";
-import { cleanCommentContent, formatTimeAgo } from "../utils/commentFormatter";
+import { cleanCommentContent } from "../utils/commentFormatter";
 import { processCommentContent } from "../utils/markdownProcessor";
 
 /**
@@ -299,9 +299,6 @@ export class AzDOComment extends CommentBase {
 	 */
 	private updateLabel(): void {
 		const parts: string[] = [];
-
-		// Time ago
-		parts.push(formatTimeAgo(this.publishedDate));
 
 		// Edited indicator
 		if (this.wasEdited) {

@@ -11,6 +11,7 @@ import { PdfFileHandler } from "../services/lfs/handlers/pdfHandler";
 import { LfsService } from "../services/lfs/lfsService";
 import { PRCacheService } from "../services/prCache";
 import { PRContextManager, type PRFileContext } from "../services/prContextManager";
+import { ReviewedFilesService } from "../services/reviewedFilesService";
 import {
 	cleanCommentContent,
 	formatTimeAgo,
@@ -31,6 +32,7 @@ export class PullRequestViewerPanel {
 	private static _markedPromise: Promise<any> | undefined;
 	private static _lfsService: LfsService | undefined;
 	private static _fileHandlerRegistry: FileHandlerRegistry | undefined;
+	private static _reviewedFilesService: ReviewedFilesService | undefined;
 
 	public static get currentPanel(): PullRequestViewerPanel | undefined {
 		return PullRequestViewerPanel._currentPanel;
@@ -82,6 +84,9 @@ export class PullRequestViewerPanel {
 						logger.debug("Refresh requested from webview");
 						await this.refreshWithFreshData();
 						break;
+					case "toggleFileReviewed":
+						await this._handleToggleReviewed(message.filePath);
+						break;
 					default:
 						logger.debug("Unknown command:", message.command);
 				}
@@ -95,7 +100,10 @@ export class PullRequestViewerPanel {
 		extensionUri: vscode.Uri,
 		azureDevOpsClient: AzureDevOpsClient,
 		pullRequest: PullRequest,
+		reviewedFilesService: ReviewedFilesService,
 	) {
+		// Store the reviewed files service
+		PullRequestViewerPanel._reviewedFilesService = reviewedFilesService;
 		const column = vscode.window.activeTextEditor
 			? vscode.window.activeTextEditor.viewColumn
 			: undefined;
@@ -485,6 +493,41 @@ export class PullRequestViewerPanel {
 	}
 
 	/**
+	 * Handle toggling the reviewed state of a file
+	 */
+	private async _handleToggleReviewed(filePath: string) {
+		if (!PullRequestViewerPanel._reviewedFilesService) {
+			logger.warn("ReviewedFilesService not available");
+			return;
+		}
+
+		try {
+			const projectId = this.pullRequest.repository.project.id;
+			const repositoryId = this.pullRequest.repository.id;
+			const prId = this.pullRequest.pullRequestId;
+
+			// Toggle the reviewed state
+			const newState = await PullRequestViewerPanel._reviewedFilesService.toggleFileReviewed(
+				projectId,
+				repositoryId,
+				prId,
+				filePath,
+			);
+
+			// Send updated state back to webview for dynamic UI update
+			this._panel.webview.postMessage({
+				command: "fileReviewedStateChanged",
+				filePath: filePath,
+				reviewed: newState,
+			});
+
+			logger.debug(`Toggled reviewed state for ${filePath}: ${newState}`);
+		} catch (error) {
+			logger.error("Error toggling reviewed state:", error);
+		}
+	}
+
+	/**
 	 * Open a file in diff view showing changes between base and modified versions
 	 *
 	 * CRITICAL METHOD - This creates virtual documents with the "azdo-pr" scheme
@@ -695,6 +738,17 @@ export class PullRequestViewerPanel {
 
 						// Open diff view
 						await vscode.commands.executeCommand("vscode.diff", baseUri, modifiedUri, title);
+
+						// Mark file as reviewed
+						if (PullRequestViewerPanel._reviewedFilesService) {
+							await PullRequestViewerPanel._reviewedFilesService.markAsReviewed(
+								this.pullRequest.repository.project.id,
+								this.pullRequest.repository.id,
+								this.pullRequest.pullRequestId,
+								path,
+							);
+							logger.debug(`Marked file as reviewed: ${path}`);
+						}
 
 						progress.report({ increment: 100 });
 						logger.debug("Diff view opened successfully for:", path);
@@ -1190,6 +1244,26 @@ export class PullRequestViewerPanel {
                 white-space: nowrap;
                 margin-left: auto;
                 flex-shrink: 0;
+            }
+            .reviewed-badge {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                background-color: var(--vscode-testing-iconPassed);
+                color: white;
+                border-radius: 50%;
+                font-size: 12px;
+                font-weight: bold;
+                margin-left: auto;
+                margin-right: 4px;
+                cursor: pointer;
+                flex-shrink: 0;
+                transition: opacity 0.2s;
+            }
+            .reviewed-badge:hover {
+                opacity: 0.8;
             }
             .file-change-type {
                 font-size: 11px;
@@ -2163,6 +2237,19 @@ export class PullRequestViewerPanel {
 						? `<span class="comment-count-badge" title="${commentCount} comment${commentSuffix}">💬 ${commentCount}</span>`
 						: "";
 
+				// Check if file is reviewed
+				const isReviewed =
+					PullRequestViewerPanel._reviewedFilesService?.isFileReviewed(
+						this.pullRequest.repository.project.id,
+						this.pullRequest.repository.id,
+						this.pullRequest.pullRequestId,
+						normalizedPath,
+					) || false;
+
+				const reviewedBadge = isReviewed
+					? '<span class="reviewed-badge" data-action="toggle-reviewed" title="Mark as not reviewed">✓</span>'
+					: "";
+
 				return `
                 <li class="file-item" data-file-path="${this._escapeHtml(change.item?.path)}" data-change-type="${this._escapeHtml(change.changeType)}" data-original-path="${this._escapeHtml(change.originalPath || "")}" data-file-index="${index}">
                     <span class="file-change-type ${changeTypeClass}">${changeTypeText}</span>
@@ -2170,6 +2257,7 @@ export class PullRequestViewerPanel {
                         <span class="file-name">${this._escapeHtml(displayFileName)}</span>
                         <span class="file-dir-path">${this._escapeHtml(displayDirPath)}</span>
                     </div>
+                    ${reviewedBadge}
                     ${commentBadge}
                 </li>`;
 			})
@@ -2216,6 +2304,26 @@ export class PullRequestViewerPanel {
                 // Add click handlers to all file items
                 document.addEventListener('click', function(event) {
                     const target = event.target;
+
+                    // Handle reviewed badge clicks (check this first to prevent file opening)
+                    const reviewedBadge = target.closest('.reviewed-badge');
+                    if (reviewedBadge) {
+                        event.stopPropagation();  // Don't trigger file open
+
+                        const fileItem = reviewedBadge.closest('.file-item');
+                        const filePath = fileItem.getAttribute('data-file-path');
+                        console.log('Reviewed badge clicked:', filePath);
+
+                        try {
+                            vscode.postMessage({
+                                command: 'toggleFileReviewed',
+                                filePath: filePath
+                            });
+                        } catch (error) {
+                            console.error('Error toggling reviewed state:', error);
+                        }
+                        return;  // Don't fall through to file opening
+                    }
 
                     // Find the closest file-item element
                     const fileItem = target.closest('.file-item');
@@ -2285,6 +2393,47 @@ export class PullRequestViewerPanel {
                             console.log('Refresh message posted successfully');
                         } catch (error) {
                             console.error('Error posting refresh message:', error);
+                        }
+                    }
+                });
+
+                // Listen for messages from extension (e.g., reviewed state changes)
+                window.addEventListener('message', event => {
+                    const message = event.data;
+
+                    if (message.command === 'fileReviewedStateChanged') {
+                        const fileItem = document.querySelector(
+                            \`[data-file-path="\${message.filePath}"]\`
+                        );
+
+                        if (fileItem) {
+                            const existingBadge = fileItem.querySelector('.reviewed-badge');
+                            const commentBadge = fileItem.querySelector('.comment-count-badge');
+                            const fileInfo = fileItem.querySelector('.file-info');
+
+                            if (message.reviewed && !existingBadge) {
+                                // Add reviewed badge
+                                const badge = document.createElement('span');
+                                badge.className = 'reviewed-badge';
+                                badge.setAttribute('data-action', 'toggle-reviewed');
+                                badge.setAttribute('title', 'Mark as not reviewed');
+                                badge.textContent = '✓';
+
+                                // Insert before comment badge if it exists, otherwise append
+                                if (commentBadge) {
+                                    fileItem.insertBefore(badge, commentBadge);
+                                } else if (fileInfo) {
+                                    fileInfo.insertAdjacentElement('afterend', badge);
+                                } else {
+                                    fileItem.appendChild(badge);
+                                }
+
+                                console.log('Added reviewed badge for:', message.filePath);
+                            } else if (!message.reviewed && existingBadge) {
+                                // Remove reviewed badge
+                                existingBadge.remove();
+                                console.log('Removed reviewed badge for:', message.filePath);
+                            }
                         }
                     }
                 });

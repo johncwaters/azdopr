@@ -5,6 +5,7 @@ import { PullRequestProvider } from "./providers/pullRequestProvider";
 import { AzureDevOpsClient, type PullRequest } from "./services/azureDevOpsClient";
 import { CommentEventCoordinator } from "./services/commentEventCoordinator";
 import { LfsCache } from "./services/lfs/lfsCache";
+import { ReviewedFilesService } from "./services/reviewedFilesService";
 import { Logger } from "./utils/logger";
 import { PullRequestViewerPanel } from "./views/pullRequestViewerPanel";
 
@@ -16,6 +17,7 @@ let refreshInterval: NodeJS.Timeout | undefined;
 let azureDevOpsClient: AzureDevOpsClient;
 let commentController: PRCommentController;
 let commentEventCoordinator: CommentEventCoordinator;
+let reviewedFilesService: ReviewedFilesService;
 
 export async function activate(context: vscode.ExtensionContext) {
 	logger.info("Azure DevOps PR Viewer extension is now active");
@@ -53,6 +55,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Initialize event coordinator for debounced comment loading
 	commentEventCoordinator = new CommentEventCoordinator(commentController);
+
+	// Initialize reviewed files service
+	reviewedFilesService = ReviewedFilesService.getInstance(context);
 
 	// Collect all subscriptions
 	const subscriptions = [
@@ -137,7 +142,12 @@ export async function activate(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				await PullRequestViewerPanel.createOrShow(context.extensionUri, azureDevOpsClient, pr);
+				await PullRequestViewerPanel.createOrShow(
+					context.extensionUri,
+					azureDevOpsClient,
+					pr,
+					reviewedFilesService,
+				);
 			},
 		),
 		vscode.commands.registerCommand("azureDevOpsPRs.clearLfsCache", async () => {
