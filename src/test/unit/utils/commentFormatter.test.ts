@@ -288,7 +288,8 @@ suite("commentFormatter", () => {
 			resolver.set("5b8b71b7-3eb7-6574-b377-a695965dbda8", "Alice");
 			resolver.set("abcd1234-5678-90ef-1234-567890abcdef", "Bob");
 
-			const content = "@<5B8B71B7-3EB7-6574-B377-A695965DBDA8> and @<ABCD1234-5678-90EF-1234-567890ABCDEF> please review";
+			const content =
+				"@<5B8B71B7-3EB7-6574-B377-A695965DBDA8> and @<ABCD1234-5678-90EF-1234-567890ABCDEF> please review";
 			const result = cleanCommentContent(content, resolver);
 			assert.strictEqual(result, "@Alice and @Bob please review");
 		});
@@ -297,16 +298,19 @@ suite("commentFormatter", () => {
 			const resolver = new Map<string, string>();
 			resolver.set("5b8b71b7-3eb7-6574-b377-a695965dbda8", "Alice");
 
-			const content = "@<5B8B71B7-3EB7-6574-B377-A695965DBDA8> and @<5B8B71B7-3EB7-6574-B377-A695965DBDA8> again";
+			const content =
+				"@<5B8B71B7-3EB7-6574-B377-A695965DBDA8> and @<5B8B71B7-3EB7-6574-B377-A695965DBDA8> again";
 			const result = cleanCommentContent(content, resolver);
 			assert.strictEqual(result, "@Alice and @Alice again");
 		});
 
-		test("should fall back to @user for unresolved GUID", () => {
+		test("should fall back to @user for unresolved valid GUID", () => {
 			const resolver = new Map<string, string>();
 			resolver.set("5b8b71b7-3eb7-6574-b377-a695965dbda8", "Alice");
 
-			const content = "@<5B8B71B7-3EB7-6574-B377-A695965DBDA8> and @<UNKNOWN-GUID-1234-5678-ABCDEFABCDEF>";
+			// Use a valid hex GUID that's not in the resolver
+			const content =
+				"@<5B8B71B7-3EB7-6574-B377-A695965DBDA8> and @<AAAABBBB-CCCC-DDDD-EEEE-FFFF00001111>";
 			const result = cleanCommentContent(content, resolver);
 			assert.strictEqual(result, "@Alice and @user");
 		});

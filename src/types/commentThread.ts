@@ -169,7 +169,14 @@ export class CommentThreadManager {
 			if (existingComment instanceof TemporaryComment) {
 				const identityResolver = this.buildIdentityResolver(newServerComments);
 				updatedComments.push(
-					new AzDOComment(serverComment, thread.threadId, thread, organizationUrl, currentUserId, identityResolver),
+					new AzDOComment(
+						serverComment,
+						thread.threadId,
+						thread,
+						organizationUrl,
+						currentUserId,
+						identityResolver,
+					),
 				);
 				hasChanges = true;
 				continue;
@@ -218,7 +225,15 @@ export class CommentThreadManager {
 	): AzDOComment[] {
 		const identityResolver = this.buildIdentityResolver(serverComments);
 		return serverComments.map(
-			(comment) => new AzDOComment(comment, threadId, parent, organizationUrl, currentUserId, identityResolver),
+			(comment) =>
+				new AzDOComment(
+					comment,
+					threadId,
+					parent,
+					organizationUrl,
+					currentUserId,
+					identityResolver,
+				),
 		);
 	}
 

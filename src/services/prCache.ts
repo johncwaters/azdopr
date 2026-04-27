@@ -76,6 +76,11 @@ export class PRCacheService {
 		return PRCacheService._instance;
 	}
 
+	/** Reset singleton for test isolation */
+	public static resetInstance(): void {
+		PRCacheService._instance = undefined;
+	}
+
 	/**
 	 * Generate a unique cache key for a PR
 	 */
@@ -139,32 +144,6 @@ export class PRCacheService {
 	}
 
 	/**
-	 * Invalidate all cached PRs for a specific repository
-	 */
-	public invalidateRepository(projectId: string, repositoryId: string): void {
-		const prefix = `${projectId}:${repositoryId}:`;
-		for (const key of this.cache.keys()) {
-			if (key.startsWith(prefix)) {
-				this.cache.delete(key);
-			}
-		}
-	}
-
-	/**
-	 * Clear all cached data
-	 */
-	public clearAll(): void {
-		this.cache.clear();
-	}
-
-	/**
-	 * Get the current cache size
-	 */
-	public size(): number {
-		return this.cache.size;
-	}
-
-	/**
 	 * Remove expired entries from the cache
 	 */
 	private cleanup(): void {
@@ -183,20 +162,5 @@ export class PRCacheService {
 		setInterval(() => {
 			this.cleanup();
 		}, CACHE_CLEANUP_INTERVAL_MS);
-	}
-
-	/**
-	 * Get cache statistics for debugging
-	 */
-	public getStats(): { size: number; entries: Array<{ key: string; age: number }> } {
-		const now = Date.now();
-		const entries = Array.from(this.cache.entries()).map(([key, value]) => ({
-			key,
-			age: now - value.timestamp,
-		}));
-		return {
-			size: this.cache.size,
-			entries,
-		};
 	}
 }

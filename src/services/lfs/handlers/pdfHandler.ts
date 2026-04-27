@@ -182,20 +182,4 @@ export class PdfFileHandler implements LfsFileHandler {
 			errors: errorCount,
 		});
 	}
-
-	/**
-	 * Get the temp directory path (for testing/debugging)
-	 * @returns The temp directory path
-	 */
-	getTempDirectory(): string {
-		return this.tempDir;
-	}
-
-	/**
-	 * Get count of temp files created (for testing/debugging)
-	 * @returns Number of temp files tracked
-	 */
-	getTempFileCount(): number {
-		return this.createdFiles.size;
-	}
 }

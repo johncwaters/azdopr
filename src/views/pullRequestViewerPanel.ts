@@ -17,7 +17,7 @@ import {
 	formatTimeAgo,
 	getThreadStatusLabel,
 } from "../utils/commentFormatter";
-import { sanitizeHtml, escapeHtml, autoLinkUrls } from '../utils/htmlSanitizer';
+import { autoLinkUrls, escapeHtml, sanitizeHtml } from "../utils/htmlSanitizer";
 import { Logger } from "../utils/logger";
 
 const logger = Logger.getInstance();
@@ -394,7 +394,7 @@ export class PullRequestViewerPanel {
 				if (dataUri) {
 					avatarMap.set(url, dataUri);
 				}
-			} catch (error) {
+			} catch (_error) {
 				// Silently ignore failed image fetches - will fall back to initials
 			}
 		});
@@ -499,7 +499,15 @@ export class PullRequestViewerPanel {
 			"</head>",
 			"<body>",
 			'<div class="container">',
-			this._getHeaderHtml(pr, sourceBranch, targetBranch, createdDate, createdTime, cacheInfo, avatarMap),
+			this._getHeaderHtml(
+				pr,
+				sourceBranch,
+				targetBranch,
+				createdDate,
+				createdTime,
+				cacheInfo,
+				avatarMap,
+			),
 			this._getTabNavigationHtml(fileChanges, threads),
 			'<div class="tab-content">',
 			this._getConversationTabHtml(pr, descriptionHtml, threads, avatarMap),
@@ -1252,6 +1260,10 @@ export class PullRequestViewerPanel {
                 line-height: 1;
             }
             .pr-meta {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 4px;
                 color: var(--vscode-descriptionForeground);
                 font-size: 13px;
             }
@@ -1768,6 +1780,22 @@ export class PullRequestViewerPanel {
             .avatar-fallback.avatar-lg {
                 font-size: 12px;
             }
+            /* UserBadge component - self-aligning avatar+name unit */
+            .user-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                vertical-align: middle;
+                line-height: 1;
+            }
+            .user-badge-md { gap: 6px; }
+            .user-badge-lg { gap: 8px; }
+            .user-badge-name {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 200px;
+            }
             .tab-navigation {
                 display: flex;
                 border-bottom: 1px solid var(--vscode-panel-border);
@@ -2279,9 +2307,7 @@ export class PullRequestViewerPanel {
                 </div>
             </div>
             <div class="pr-meta">
-                #${pr.pullRequestId} opened on ${createdDate} at ${createdTime} by
-                ${this._getAvatarHtml(avatarMap.get(pr.createdBy?.imageUrl || ""), pr.createdBy?.displayName || "Unknown", "sm")}
-                ${this._escapeHtml(pr.createdBy?.displayName || "[User name unavailable]")}
+                #${pr.pullRequestId} opened on ${createdDate} at ${createdTime} by ${this._getUserBadgeHtml(avatarMap.get(pr.createdBy?.imageUrl || ""), pr.createdBy?.displayName || "Unknown", { size: "sm" })}
             </div>
             <div class="pr-meta-secondary">
                 <span class="meta-item">
@@ -2300,7 +2326,10 @@ export class PullRequestViewerPanel {
         </div>`;
 	}
 
-	private _getCombinedReviewsHtml(pr: PullRequest, avatarMap: Map<string, string> = new Map()): string {
+	private _getCombinedReviewsHtml(
+		pr: PullRequest,
+		avatarMap: Map<string, string> = new Map(),
+	): string {
 		// Calculate vote counts
 		const approvedCount = pr.reviewers?.filter((r) => r.vote === 10).length || 0;
 		const approvedWithSuggestionsCount = pr.reviewers?.filter((r) => r.vote === 5).length || 0;
@@ -2505,19 +2534,19 @@ export class PullRequestViewerPanel {
 		}
 
 		// Check for system author names
-		const authorName = firstComment.author?.displayName || '';
+		const authorName = firstComment.author?.displayName || "";
 		const systemAuthorPatterns = [
 			/Microsoft\.VisualStudio\.Services/i,
 			/^TFS$/i,
 			/Azure DevOps/i,
 			/^\[?System\]?$/i,
 		];
-		if (systemAuthorPatterns.some(pattern => pattern.test(authorName))) {
+		if (systemAuthorPatterns.some((pattern) => pattern.test(authorName))) {
 			return true;
 		}
 
 		// Check content patterns for notification-style messages
-		const content = firstComment.content || '';
+		const content = firstComment.content || "";
 		const notificationPatterns = [
 			/joined as a reviewer/i,
 			/left as a reviewer/i,
@@ -2532,7 +2561,7 @@ export class PullRequestViewerPanel {
 			/status has been updated/i,
 			/marked .* as (draft|ready for review)/i,
 		];
-		if (notificationPatterns.some(pattern => pattern.test(content))) {
+		if (notificationPatterns.some((pattern) => pattern.test(content))) {
 			return true;
 		}
 
@@ -2545,7 +2574,10 @@ export class PullRequestViewerPanel {
 	 * 1. Threads without a file path (general PR comments)
 	 * 2. Threads with a file path but no line numbers (file-level comments)
 	 */
-	private _getGeneralCommentsHtml(threads: PRThread[], avatarMap: Map<string, string> = new Map()): string {
+	private _getGeneralCommentsHtml(
+		threads: PRThread[],
+		avatarMap: Map<string, string> = new Map(),
+	): string {
 		// Build identity resolver from all comment authors in all threads
 		const identityResolver = new Map<string, string>();
 		for (const thread of threads) {
@@ -2611,7 +2643,7 @@ export class PullRequestViewerPanel {
 				// For notification comments, render as simple activity item
 				if (isNotification) {
 					const timeAgo = formatTimeAgo(thread.lastUpdatedDate);
-					const notificationText = content.replace(/<[^>]*>/g, '').trim(); // Strip any HTML
+					const notificationText = content.replace(/<[^>]*>/g, "").trim(); // Strip any HTML
 					return `
 						<div class="notification-item">
 							<span class="notification-icon">📋</span>
@@ -3122,7 +3154,7 @@ export class PullRequestViewerPanel {
 	private _getAvatarHtml(
 		imageDataUri: string | undefined,
 		displayName: string,
-		size: "sm" | "md" | "lg" = "sm"
+		size: "sm" | "md" | "lg" = "sm",
 	): string {
 		const escapedName = this._escapeHtml(displayName);
 		const sizeClass = `avatar-${size}`;
@@ -3131,8 +3163,42 @@ export class PullRequestViewerPanel {
 			return `<img class="avatar ${sizeClass}" src="${imageDataUri}" alt="${escapedName}" title="${escapedName}" />`;
 		}
 
-		const initials = this._getInitials(displayName);
+		const initials = this._escapeHtml(this._getInitials(displayName));
 		return `<span class="avatar avatar-fallback ${sizeClass}" title="${escapedName}">${initials}</span>`;
+	}
+
+	/**
+	 * Generate a user badge with avatar and name, properly aligned
+	 * @param imageDataUri Base64 data URI for the avatar image (or undefined)
+	 * @param displayName User's display name
+	 * @param options Configuration options
+	 */
+	private _getUserBadgeHtml(
+		imageDataUri: string | undefined,
+		displayName: string,
+		options?: {
+			size?: "sm" | "md" | "lg";
+			showName?: boolean;
+		},
+	): string {
+		const size = options?.size ?? "sm";
+		const showName = options?.showName ?? true;
+		const escapedName = this._escapeHtml(displayName);
+		const initials = this._escapeHtml(this._getInitials(displayName));
+		const sizeClass = `avatar-${size}`;
+
+		let avatarHtml: string;
+		if (imageDataUri) {
+			// Image with hidden fallback that shows on error
+			avatarHtml = `<img class="avatar ${sizeClass}" src="${imageDataUri}" alt="${escapedName}" title="${escapedName}" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';" /><span class="avatar avatar-fallback ${sizeClass}" style="display:none;" title="${escapedName}">${initials}</span>`;
+		} else {
+			// Fallback initials only
+			avatarHtml = `<span class="avatar avatar-fallback ${sizeClass}" title="${escapedName}">${initials}</span>`;
+		}
+
+		const nameHtml = showName ? `<span class="user-badge-name">${escapedName}</span>` : "";
+
+		return `<span class="user-badge user-badge-${size}" aria-label="${escapedName}">${avatarHtml}${nameHtml}</span>`;
 	}
 
 	/**

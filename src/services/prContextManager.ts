@@ -33,6 +33,11 @@ export class PRContextManager {
 		return PRContextManager.instance;
 	}
 
+	/** Reset singleton for test isolation */
+	public static resetInstance(): void {
+		PRContextManager.instance = undefined as unknown as PRContextManager;
+	}
+
 	/**
 	 * Set the current active PR context
 	 */

@@ -72,7 +72,7 @@ export class LfsService {
 
 	constructor(
 		private readonly azureDevOpsClient: AzureDevOpsClient,
-		private readonly fileHandlerRegistry: FileHandlerRegistry,
+		readonly _fileHandlerRegistry: FileHandlerRegistry,
 		readonly extensionContext?: vscode.ExtensionContext,
 	) {
 		// Initialize cache if extension context is provided
@@ -303,60 +303,6 @@ export class LfsService {
 			});
 			throw error;
 		}
-	}
-
-	/**
-	 * Download LFS file using local Git checkout (fallback method)
-	 *
-	 * **NOTE: This feature is not yet implemented.**
-	 *
-	 * This would be a fallback when the Azure DevOps API download fails.
-	 * It would require Git and Git LFS to be installed on the user's system.
-	 *
-	 * **Planned implementation:**
-	 * 1. Clone repository to temp directory
-	 * 2. Checkout specific commit
-	 * 3. Run `git lfs pull` for the specific file
-	 * 4. Read file content from disk
-	 * 5. Clean up temp directory
-	 *
-	 * **Current behavior:** Throws error indicating feature not available
-	 *
-	 * @param _projectId The Azure DevOps project ID
-	 * @param _repositoryId The repository ID
-	 * @param _repositoryName The repository name
-	 * @param _path The file path
-	 * @param _version The commit SHA or branch name
-	 * @returns Promise resolving to the file content as a Buffer
-	 * @throws Error indicating feature not implemented
-	 */
-	public async downloadLfsFileLocal(
-		_projectId: string,
-		_repositoryId: string,
-		_repositoryName: string,
-		_path: string,
-		_version: string,
-	): Promise<Buffer> {
-		throw new Error(
-			"Local Git LFS checkout not yet implemented. " +
-				"Please ensure the file is accessible via Azure DevOps API.",
-		);
-	}
-
-	/**
-	 * Get the file handler registry
-	 * @returns The file handler registry instance
-	 */
-	public getFileHandlerRegistry(): FileHandlerRegistry {
-		return this.fileHandlerRegistry;
-	}
-
-	/**
-	 * Get the LFS cache instance
-	 * @returns The cache instance, or undefined if not initialized
-	 */
-	public getCache(): LfsCache | undefined {
-		return this.cache;
 	}
 
 	/**

@@ -345,12 +345,4 @@ export class LfsCache {
 			};
 		}
 	}
-
-	/**
-	 * Get the cache directory path
-	 * @returns The cache directory path
-	 */
-	public getCacheDirectory(): string {
-		return this.cacheDir;
-	}
 }

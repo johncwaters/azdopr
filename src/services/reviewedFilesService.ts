@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 
 /**
  * Interface for storing reviewed file metadata
@@ -44,6 +44,11 @@ export class ReviewedFilesService {
 			ReviewedFilesService._instance = new ReviewedFilesService(context);
 		}
 		return ReviewedFilesService._instance;
+	}
+
+	/** Reset singleton for test isolation */
+	public static resetInstance(): void {
+		ReviewedFilesService._instance = undefined;
 	}
 
 	/**
@@ -148,55 +153,6 @@ export class ReviewedFilesService {
 		};
 
 		store[prKey].lastUpdated = Date.now();
-		await this.updateStore(store);
-	}
-
-	/**
-	 * Mark a file as unreviewed
-	 */
-	public async markAsUnreviewed(
-		projectId: string,
-		repositoryId: string,
-		prId: number,
-		filePath: string,
-	): Promise<void> {
-		const store = this.getStore();
-		const prKey = this.getPRKey(projectId, repositoryId, prId);
-
-		if (!store[prKey]) {
-			return; // Already not reviewed
-		}
-
-		// Remove the file
-		delete store[prKey].files[filePath];
-		store[prKey].lastUpdated = Date.now();
-		await this.updateStore(store);
-	}
-
-	/**
-	 * Get all reviewed files for a PR
-	 */
-	public getReviewedFiles(
-		projectId: string,
-		repositoryId: string,
-		prId: number,
-	): string[] {
-		const store = this.getStore();
-		const prKey = this.getPRKey(projectId, repositoryId, prId);
-		return Object.keys(store[prKey]?.files || {});
-	}
-
-	/**
-	 * Clear all reviewed files for a PR
-	 */
-	public async clearPR(
-		projectId: string,
-		repositoryId: string,
-		prId: number,
-	): Promise<void> {
-		const store = this.getStore();
-		const prKey = this.getPRKey(projectId, repositoryId, prId);
-		delete store[prKey];
 		await this.updateStore(store);
 	}
 }

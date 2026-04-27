@@ -4,11 +4,6 @@
 
 // API Responses
 export {
-	create401Response,
-	create404Response,
-	create500Response,
-	createAxiosResponse,
-	createNetworkError,
 	mockAzDOPRListResponse,
 	mockAzDOProjectsResponse,
 	mockAzDORepositoriesResponse,

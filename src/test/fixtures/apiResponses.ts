@@ -1,5 +1,3 @@
-import type { AxiosResponse } from "axios";
-
 /**
  * Raw Azure DevOps API response for PR list
  */
@@ -144,55 +142,3 @@ export const mockLfsPointerResponse = {
 		"version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22ebbe7a2b7b4e3b0e3e6e5c7d2f1e8c9a0\nsize 12345678",
 	encoding: "utf-8",
 };
-
-/**
- * Helper function to create an Axios response wrapper
- */
-export function createAxiosResponse<T>(data: T, status = 200, statusText = "OK"): AxiosResponse<T> {
-	return {
-		data,
-		status,
-		statusText,
-		headers: {},
-		config: {
-			// biome-ignore lint/suspicious/noExplicitAny: Axios config type requires any for headers
-			headers: {} as any,
-		},
-	};
-}
-
-/**
- * Create a 404 error response
- */
-export function create404Response(message = "Not Found"): AxiosResponse {
-	return createAxiosResponse({ message, typeKey: "NotFound" }, 404, "Not Found");
-}
-
-/**
- * Create a 500 error response
- */
-export function create500Response(message = "Internal Server Error"): AxiosResponse {
-	return createAxiosResponse(
-		{ message, typeKey: "InternalServerError" },
-		500,
-		"Internal Server Error",
-	);
-}
-
-/**
- * Create a network error (simulates timeout or connection failure)
- */
-export function createNetworkError(message = "Network Error"): Error {
-	// biome-ignore lint/suspicious/noExplicitAny: Need to add custom properties to Error object
-	const error: any = new Error(message);
-	error.code = "ECONNABORTED";
-	error.isAxiosError = true;
-	return error;
-}
-
-/**
- * Create an unauthorized error response
- */
-export function create401Response(message = "Unauthorized"): AxiosResponse {
-	return createAxiosResponse({ message, typeKey: "Unauthorized" }, 401, "Unauthorized");
-}

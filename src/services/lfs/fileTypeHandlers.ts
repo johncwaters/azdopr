@@ -136,14 +136,6 @@ export class FileHandlerRegistry {
 	}
 
 	/**
-	 * Get all registered handlers
-	 * @returns Array of all registered handlers
-	 */
-	getAllHandlers(): LfsFileHandler[] {
-		return [...this.handlers];
-	}
-
-	/**
 	 * Remove all registered handlers
 	 * Useful for testing or reinitializing the registry
 	 */

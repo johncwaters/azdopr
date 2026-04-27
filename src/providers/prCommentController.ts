@@ -3,7 +3,7 @@ import { THREAD_STATUS } from "../constants/azureDevOpsConstants";
 import { COMMENT_DEBOUNCE_MS } from "../constants/cacheConfig";
 import type { AzureDevOpsClient, PRThread } from "../services/azureDevOpsClient";
 import { PRContextManager } from "../services/prContextManager";
-import { type AuthorInfo, AzDOComment, TemporaryComment } from "../types/comments";
+import { type AuthorInfo, type AzDOComment, TemporaryComment } from "../types/comments";
 import { type AzDOCommentThread, CommentThreadManager } from "../types/commentThread";
 import { formatErrorWithPrefix } from "../utils/errorFormatter";
 import { Logger } from "../utils/logger";

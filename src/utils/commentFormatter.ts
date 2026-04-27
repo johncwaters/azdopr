@@ -92,7 +92,7 @@ export function cleanCommentContent(
 	identityResolver?: Map<string, string>,
 ): string {
 	// Replace GUID mentions like @<5B8B71B7-3EB7-6574-B377-A695965DBDA8>
-	const cleaned = content.replace(/@<([A-F0-9-]+)>/gi, (match, guid) => {
+	const cleaned = content.replace(/@<([A-F0-9-]+)>/gi, (_match, guid) => {
 		if (identityResolver) {
 			const displayName = identityResolver.get(guid.toLowerCase());
 			if (displayName) {
@@ -140,65 +140,6 @@ export function formatCommentHeaderMarkdown(
 	}
 
 	return parts.join(" • ");
-}
-
-/**
- * Format a comment header as HTML
- * Used for webview comments
- */
-export function formatCommentHeaderHtml(
-	comment: PRComment,
-	threadStatus?: string | number,
-	includeStatus = false,
-	escapeHtml: (text: string) => string = (t) => t,
-): string {
-	const parts: string[] = [];
-
-	// Author
-	parts.push(`<span class="comment-author">${escapeHtml(comment.author.displayName)}</span>`);
-
-	// Time
-	parts.push(`<span class="comment-time">${formatTimeAgo(comment.publishedDate)}</span>`);
-
-	// Status badge (if requested and meaningful)
-	if (includeStatus && threadStatus !== undefined && threadStatus !== null) {
-		const statusLabel = getThreadStatusLabel(threadStatus);
-		if (
-			statusLabel !== "Active" &&
-			!statusLabel.startsWith("Unknown") &&
-			!statusLabel.startsWith("Not Set")
-		) {
-			const statusClass = getStatusBadgeClass(threadStatus);
-			parts.push(
-				`<span class="comment-status-badge ${statusClass}">${escapeHtml(statusLabel)}</span>`,
-			);
-		}
-	}
-
-	// Edited indicator
-	if (comment.lastUpdatedDate.getTime() !== comment.publishedDate.getTime()) {
-		parts.push('<span class="comment-edited">(edited)</span>');
-	}
-
-	return parts.join(" ");
-}
-
-/**
- * Get CSS class for status badge
- */
-function getStatusBadgeClass(status: string | number | undefined | null): string {
-	const statusNum = typeof status === "string" ? Number.parseInt(status, 10) : status;
-
-	if (statusNum === 2 || statusNum === 4) {
-		return "status-badge-resolved";
-	}
-	if (statusNum === 3 || statusNum === 5) {
-		return "status-badge-wontfix";
-	}
-	if (statusNum === 6) {
-		return "status-badge-pending";
-	}
-	return "status-badge-unknown";
 }
 
 /**
