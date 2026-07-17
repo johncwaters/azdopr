@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance } from "axios";
+import axiosRetry from "axios-retry";
 import * as vscode from "vscode";
 import type { AzureDevOpsAuthProvider } from "../auth/authProvider";
 import { COMMENT_TYPE, THREAD_STATUS } from "../constants/azureDevOpsConstants";
@@ -277,6 +278,7 @@ interface CacheEntry<T> {
 export class AzureDevOpsClient {
 	private readonly axiosInstance: AxiosInstance;
 	private organization: string = "";
+	private retryInterceptorIds: { requestId: number; responseId: number } | undefined;
 
 	/**
 	 * Short-term cache for individual API responses
@@ -292,7 +294,40 @@ export class AzureDevOpsClient {
 			},
 		});
 
+		this.configureRetry();
 		this.updateOrganization();
+	}
+
+	/**
+	 * Configures automatic retries on the axios instance based on the
+	 * `maxRetries` setting. Idempotent requests (GET, HEAD, OPTIONS, PUT, DELETE)
+	 * that fail are retried with exponential backoff.
+	 * POST/PATCH requests are never retried.
+	 */
+	public configureRetry(): void {
+		if (this.retryInterceptorIds) {
+			this.axiosInstance.interceptors.request.eject(this.retryInterceptorIds.requestId);
+			this.axiosInstance.interceptors.response.eject(this.retryInterceptorIds.responseId);
+			this.retryInterceptorIds = undefined;
+		}
+
+		const config = vscode.workspace.getConfiguration("azureDevOpsPRViewer");
+		const maxRetries = Math.max(0, config.get<number>("maxRetries", 3));
+		const { requestInterceptorId, responseInterceptorId } = axiosRetry(this.axiosInstance, {
+			retries: maxRetries,
+			retryDelay: axiosRetry.exponentialDelay,
+			onRetry: (retryCount, error, requestConfig) => {
+				logger.warn(
+					`AzureDevOpsClient: Retrying ${requestConfig.method?.toUpperCase()} ${requestConfig.url} ` +
+						`(attempt ${retryCount}/${maxRetries}) after error: ${error.message}`,
+				);
+			},
+		});
+
+		this.retryInterceptorIds = {
+			requestId: requestInterceptorId,
+			responseId: responseInterceptorId,
+		};
 	}
 
 	private updateOrganization(): void {
