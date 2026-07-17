@@ -2,7 +2,7 @@
   "name": "azdopr",
   "displayName": "Azure DevOps PR Viewer",
   "description": "View all Pull Requests across your entire Azure DevOps organization in one place",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "author": "John C. Waters",
   "publisher": "johncwaters",
   "license": "MIT",
@@ -228,6 +228,13 @@
           "default": 500,
           "description": "Maximum number of PRs to fetch per project"
         },
+        "azureDevOpsPRViewer.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Maximum number of times to automatically retry failed API requests after transient network errors or 429/5xx responses (0 to disable)"
+        },
         "azureDevOpsPRViewer.includedProjects": {
           "type": "array",
           "items": {
@@ -303,6 +310,7 @@
   "dependencies": {
     "@azure/msal-node": "^3.8.1",
     "axios": "^1.13.2",
+    "axios-retry": "^4.5.0",
     "marked": "^17.0.0"
   }
 }

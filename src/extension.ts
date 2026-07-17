@@ -187,6 +187,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (e.affectsConfiguration("azureDevOpsPRViewer.autoRefreshInterval")) {
 				setupAutoRefresh();
 			}
+			if (e.affectsConfiguration("azureDevOpsPRViewer.maxRetries")) {
+				azureDevOpsClient.configureRetry();
+			}
 		}),
 		vscode.authentication.onDidChangeSessions(async (e) => {
 			if (e.provider.id === "microsoft") {
