@@ -389,6 +389,8 @@ export class AzureDevOpsClient {
 				: "",
 			sourceRefName: pr.sourceRefName || "",
 			targetRefName: pr.targetRefName || "",
+			lastMergeSourceCommit: pr.lastMergeSourceCommit,
+			lastMergeTargetCommit: pr.lastMergeTargetCommit,
 			isDraft: pr.isDraft || false,
 		};
 	}
