@@ -4,6 +4,10 @@ All notable changes to the Azure DevOps PR Viewer extension.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve recorded source and target commit IDs when loading PRs so file diffs use pinned revisions instead of falling back to current branch tips.
+
 ## [1.8.1] - 2026-05-07
 
 ### Fixed
