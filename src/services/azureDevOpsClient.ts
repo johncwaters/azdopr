@@ -292,6 +292,20 @@ export class AzureDevOpsClient {
 			},
 		});
 
+		this.axiosInstance.interceptors.response.use(undefined, (error: unknown) => {
+			if (axios.isAxiosError(error) && error.response?.status === 401) {
+				const authorization = error.config?.headers.get("Authorization");
+				if (typeof authorization === "string" && authorization.startsWith("Bearer ")) {
+					this.authProvider.invalidateAccessToken(authorization.slice("Bearer ".length));
+					throw new Error(
+						"Azure DevOps authentication expired or was rejected. Run Azure DevOps PR Viewer: Sign In and try again.",
+						{ cause: error },
+					);
+				}
+			}
+			throw error;
+		});
+
 		this.updateOrganization();
 	}
 
@@ -303,7 +317,7 @@ export class AzureDevOpsClient {
 	private async getAuthHeaders(): Promise<Record<string, string>> {
 		const token = await this.authProvider.getAccessToken();
 		if (!token) {
-			throw new Error("Not authenticated");
+			throw new Error("Not authenticated. Run Azure DevOps PR Viewer: Sign In and try again.");
 		}
 		return {
 			Authorization: `Bearer ${token}`,

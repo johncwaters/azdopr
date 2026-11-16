@@ -4,6 +4,10 @@ All notable changes to the Azure DevOps PR Viewer extension.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Authentication recovery** - Use renewed Microsoft tokens when available without discarding a successful sign-in just because silent lookup returns no session. Discard tokens rejected by Azure DevOps with HTTP 401 and show an explicit Sign In instruction instead of a generic error. Signing in after a rejection requests a new Microsoft session; no window reload is required and failed requests are not automatically resubmitted.
+
 ## [1.8.1] - 2026-05-07
 
 ### Fixed
